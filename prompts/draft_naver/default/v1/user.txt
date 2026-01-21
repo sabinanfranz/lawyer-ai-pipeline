@@ -1,0 +1,50 @@
+아래 입력값(JSON)을 바탕으로, 네이버 블로그 초안(DraftNaver_v1)을 생성해줘.
+
+[입력값(JSON)]
+{{payload_json}}
+
+[작성 지침]
+1) 타깃 독자/상황 반영
+- intake.target_role과 intake.industry를 기준으로 “업무 맥락(리스크/의사결정/보고)” 중심으로 설명.
+- intake.issue_stage(예방/진행/사후 등)에 맞춰 “지금 당장 무엇을 점검해야 하는지”를 강조.
+- intake.pain_picker(최대 2개)와 pain_sentence가 있으면 도입부 공감에 자연스럽게 사용.
+
+2) 선택된 후보(selected_candidate) 우선 적용
+- selected_candidate.primary_keyword / longtail_keywords를 제목과 소제목에 자연스럽게 포함(키워드 나열 금지).
+- selected_candidate.hook(1문장)을 도입부 첫 문단에 반영.
+- selected_candidate.format에 맞춰 본문 구조를 선택:
+  - "checklist": 체크리스트 중심(필수)
+  - "faq": Q&A 5~7개
+  - "guide": 단계/프로세스(1~5단계) + 체크리스트
+  - "copy_examples": 문구/템플릿 예시 2~4개(단, “예시이며 사안별로 달라질 수 있음”을 명확히)
+- CTA는 selected_candidate.cta_one을 “글 맨 끝”에 1회만 넣어라(의미 변경/추가 CTA 금지).
+- deliverable(offer_material)이 있으면, 본문 중간에 “자료에서 다루는 내용(미리보기)” 섹션을 만들고 3~6개 항목만 프리뷰로 보여줘(전체를 다 풀지 말 것).
+
+3) 신뢰(Trust) 강화 장치
+- “흔한 실수/오해” 섹션을 반드시 넣고, intake.experience_seed가 있으면 그 방향으로 1~2문장 경험 기반 뉘앙스를 추가.
+- 단정 금지. “일반적으로/경우에 따라” 표현 사용.
+- 법령/판례는 사용자가 구체 값을 주지 않은 한 ‘조문 번호/사건번호’ 형태로 적지 말고, 일반 명칭 수준으로만 언급.
+
+4) 안전/컴플라이언스(초안 단계)
+- system 규칙의 금지표현(전문/최고/승소보장/무료상담/전관암시/비교비방/식별정보)을 절대 쓰지 마라.
+- 댓글/DM으로 “구체 사건 상담”을 유도하는 문구를 쓰지 마라.
+- intake.must_avoid가 있으면 그 단어/표현은 출력에서 회피.
+
+5) 필수 섹션 구성(권장 순서)
+- 제목(후보 5개)
+- 도입(공감/상황)
+- 이 글에서 얻는 것(TL;DR 3~5줄)
+- 목차
+- 본문 섹션(H2/H3): 진단 → 체크리스트/가이드/FAQ/예시 → 흔한 실수
+- 자료 미리보기(offer_material 기반)
+- 마무리 요약
+- CTA(자료 요청 1문장)
+- Disclaimer(일반 정보/사안별 상이/발행 전 변호사 검토/구체 사건 댓글 상담 불가)
+
+[출력]
+반드시 아래 JSON 스키마로만 출력해라(설명 금지):
+{
+  "title_candidates": ["...", "...", "...", "...", "..."],
+  "body_md": "...",
+  "body_html": "..."
+}

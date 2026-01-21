@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: lawyer_ai_pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lawyer_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - lawyer_ai_pgdata:/var/lib/postgresql/data
+
+volumes:
+  lawyer_ai_pgdata:

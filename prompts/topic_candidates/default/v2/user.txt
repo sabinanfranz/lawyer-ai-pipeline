@@ -1,0 +1,67 @@
+입력값(JSON):
+{{payload_json}}
+
+요구사항(엄수):
+0) 출력은 반드시 JSON만. (설명/마크다운/코드펜스 금지)
+1) 위 입력을 2문장으로 정리한 normalized_brief를 만든다.
+   - persona_summary: 업종 + 독자 역할이 한 문장에 드러나게
+   - pain_summary: 이슈 단계 + pain_picker(최대2) 중심으로 “돈/시간/리스크” 관점으로 번역
+   - assumptions: 정확히 2개. (입력에 없는 것은 “가정”으로만, 단정 금지)
+
+2) 글 주제 후보 7개를 만든다.
+   - 후보는 입력의 issue_stage, pain_picker, content_goal, offer_material을 강하게 반영.
+   - must_avoid가 있으면 그 단어/유사표현은 제목/훅/CTA 어디에도 쓰지 말 것.
+   - 7개 후보는 서로 중복되지 않게(같은 말 바꿔치기 금지). 가능하면 하위 주제를 달리해 클러스터로 구성.
+
+3) 각 후보는 아래 필드를 모두 포함한다:
+- id: 1~7의 정수(중복 금지)
+- title_search: 검색형 제목(롱테일 키워드 포함)
+- title_share: 공유형 제목(피드에서 저장/공유 유도)
+- smartblock_intent: reaction_response|info_exploration|case_analysis|checklist_template
+- content_role: cluster|pillar
+- hook: 돈/시간/리스크 관점 1문장(첫 문장 훅)
+- risk_solved: 이 글이 줄이는 리스크 1줄
+- format: checklist|guide|faq|copy_examples
+- primary_keyword: 네이버 롱테일 키워드 1개(한국어 검색어)
+- longtail_keywords: 정확히 3개 배열(연관 롱테일)
+- deliverable: 제공자료(offer_material)와 연결된 “받아가는 것” 1줄
+- cta_one: 상담 유도 금지. “자료 요청/자가진단” 기반 CTA 한 문장(하나만)
+- difficulty: 하|중|상
+- risk_level: 하|중|상
+- hitl_points: 정확히 2개 배열(변호사 검수 포인트. 예: 최신 개정/가이드/판례/업종 특수성 확인 등)
+
+4) 마지막에 top3_recommendations(정확히 3개)을 만든다:
+- { "id": number, "why": string }
+- 기준을 why에 반영:
+  (a) 진성 리드 가능성 (b) 작성 난이도 (c) 컴플라이언스 안전성 (d) 리퍼포징 적합성
+
+출력 JSON 스키마(형태를 반드시 유지):
+{
+  "normalized_brief": {
+    "persona_summary": "",
+    "pain_summary": "",
+    "assumptions": ["", ""]
+  },
+  "candidates": [
+    {
+      "id": 1,
+      "title_search": "",
+      "title_share": "",
+      "smartblock_intent": "reaction_response|info_exploration|case_analysis|checklist_template",
+      "content_role": "cluster|pillar",
+      "hook": "",
+      "risk_solved": "",
+      "format": "checklist|guide|faq|copy_examples",
+      "primary_keyword": "",
+      "longtail_keywords": ["", "", ""],
+      "deliverable": "",
+      "cta_one": "",
+      "difficulty": "하|중|상",
+      "risk_level": "하|중|상",
+      "hitl_points": ["", ""]
+    }
+  ],
+  "top3_recommendations": [
+    { "id": 1, "why": "" }
+  ]
+}

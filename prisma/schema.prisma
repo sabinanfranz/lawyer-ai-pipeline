@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ContentStatus {
+  drafted
+  revised
+}
+
+enum VersionType {
+  draft
+  revised
+}
+
+model Content {
+  id        String        @id @default(cuid())
+  shareId   String        @unique @map("share_id")
+  status    ContentStatus @default(drafted)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  versions         ContentVersion[]
+  complianceReport ComplianceReport?
+
+  @@map("contents")
+}
+
+model ContentVersion {
+  id        String     @id @default(cuid())
+  contentId String     @map("content_id")
+  content   Content    @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  versionType     VersionType @map("version_type")
+  titleCandidates Json?       @map("title_candidates")
+  bodyMd          String      @map("body_md")
+  bodyHtml        String      @map("body_html")
+  meta            Json?       @map("meta")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([contentId, versionType])
+  @@map("content_versions")
+}
+
+model ComplianceReport {
+  id        String  @id @default(cuid())
+  contentId String  @unique @map("content_id")
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  riskScore Int   @map("risk_score")
+  issues    Json? @map("issues")
+  summary   String @map("summary")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("compliance_reports")
+}
