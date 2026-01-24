@@ -11,9 +11,11 @@ export const env = {
 
   OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? "https://api.openai.com",
-  OPENAI_MODEL: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-  OPENAI_TIMEOUT_MS: num(process.env.OPENAI_TIMEOUT_MS, 30000),
-  OPENAI_MAX_TOKENS: num(process.env.OPENAI_MAX_TOKENS, 2200),
+  OPENAI_MODEL: process.env.OPENAI_MODEL ?? "gpt-5-mini",
+  OPENAI_TIMEOUT_MS: num(process.env.OPENAI_TIMEOUT_MS, 120000),
+  OPENAI_API_STYLE: (process.env.OPENAI_API_STYLE ?? "auto") as "auto" | "chat" | "responses",
+  OPENAI_MAX_COMPLETION_TOKENS: num(process.env.OPENAI_MAX_COMPLETION_TOKENS, 8000),
+  OPENAI_MAX_OUTPUT_TOKENS: num(process.env.OPENAI_MAX_OUTPUT_TOKENS, 8000),
   OPENAI_TEMPERATURE: num(process.env.OPENAI_TEMPERATURE, 0.2),
 
   DATABASE_URL: process.env.DATABASE_URL ?? "",
