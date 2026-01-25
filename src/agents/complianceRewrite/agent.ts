@@ -16,6 +16,13 @@ import { fallbackComplianceRewrite } from "./fallback";
 import { applyDeterministicRewrite, ensureDisclaimerHtml, ensureDisclaimerMd, scanCompliance } from "./ruleScan";
 import { DEFAULT_DISCLAIMER } from "@/lib/constants/safetyText";
 import { z } from "zod";
+import {
+  fixBrokenSpacing,
+  normalizeCtaSection,
+  normalizeDisclaimer,
+  qualityCheck,
+  regenerateHtml,
+} from "./qualityGate";
 
 const PROMPT_AGENT_KEY = "compliance_rewrite";
 
@@ -180,19 +187,25 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
       maxRepairAttempts: 2,
     });
 
-    // 4) Deterministic enforcement(재유입 차단) + disclaimer 강제
-    const enforced_md = ensureDisclaimerMd(
+    // 4) Deterministic enforcement(재유입 차단) + quality gate
+    let revised_md = ensureDisclaimerMd(
       applyDeterministicRewrite(guarded.data.revised_md, scan.mustAvoidTokens),
       DEFAULT_DISCLAIMER
     );
-    const enforced_html = ensureDisclaimerHtml(
+    let revised_html = ensureDisclaimerHtml(
       applyDeterministicRewrite(guarded.data.revised_html, scan.mustAvoidTokens),
       DEFAULT_DISCLAIMER
     );
 
-    const finalOut: ComplianceRewriteOutput = {
-      revised_md: enforced_md,
-      revised_html: enforced_html,
+    revised_md = fixBrokenSpacing(revised_md);
+    revised_md = normalizeCtaSection(revised_md);
+    revised_md = normalizeDisclaimer(revised_md);
+    revised_html = regenerateHtml(revised_md, revised_html);
+
+    const qc = qualityCheck(revised_md, { mustAvoid: input.must_avoid });
+    let finalOut: ComplianceRewriteOutput = {
+      revised_md,
+      revised_html,
       report: {
         risk_score: report.risk_score,
         issues: report.issues,
@@ -200,8 +213,15 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
       },
     };
 
-    if (guarded.used_fallback && ctx.llm_mode === "openai") {
-      console.warn("[ComplianceRewriteAgent] JSON_GUARD_FALLBACK → skip cache set", {
+    let usedFallback = guarded.used_fallback;
+    if (!qc.ok) {
+      console.warn("[ComplianceRewriteAgent] quality_gate_fail → fallback", { run_id: ctx.run_id, reasons: qc.reasons });
+      finalOut = fallbackOut;
+      usedFallback = true;
+    }
+
+    if (usedFallback && ctx.llm_mode === "openai") {
+      console.warn("[ComplianceRewriteAgent] skip cache set reason=fallback", {
         cacheKey,
         run_id: ctx.run_id,
         repair_attempts: guarded.repair_attempts,
@@ -214,7 +234,7 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
       ok: true,
       data: finalOut,
       meta: {
-        used_fallback: guarded.used_fallback,
+        used_fallback: usedFallback,
         cache_hit: false,
         prompt_path: prompts.baseDir,
         cache_key: cacheKey,

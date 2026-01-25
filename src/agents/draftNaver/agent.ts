@@ -12,20 +12,93 @@ import {
 } from "./schema";
 import { fallbackDraftNaver } from "./fallback";
 import { mdToHtml } from "@/lib/utils/mdToHtml";
+import { normalizeMdLines } from "./mdNormalize";
 
 const PROMPT_AGENT_KEY = "draft_naver";
 
-function toFinal(llm: DraftNaverLLMResponse): DraftNaverResponse {
-  const body_md = (llm.body_md_lines ?? []).join("\n");
+function normalizeTitleCandidates(rawTitles: unknown, payload: any): string[] {
+  const titles: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (t?: string) => {
+    if (!t || typeof t !== "string") return;
+    const v = t.trim();
+    if (!v) return;
+    if (seen.has(v)) return;
+    seen.add(v);
+    titles.push(v);
+  };
+
+  if (Array.isArray(rawTitles)) {
+    for (const t of rawTitles) push(typeof t === "string" ? t : undefined);
+  }
+
+  // 보강: payload의 선택된 후보 정보로 채우기
+  const sel = payload?.selected_candidate ?? {};
+  push(sel.title_search);
+  push(sel.title_share);
+  push(sel.primary_keyword);
+
+  // 안전 템플릿으로 채우기
+  const safeTemplates = [
+    "체크리스트로 보는 주요 리스크 점검 포인트",
+    "실무자가 바로 쓰는 가이드 핵심 정리",
+    "반복되는 실수 줄이는 점검 예시 모음",
+  ];
+  for (const t of safeTemplates) {
+    if (titles.length >= 5) break;
+    push(t);
+  }
+
+  // 3개 미만일 경우 안전 템플릿으로 채우기
+  while (titles.length < 3 && safeTemplates.length > 0) {
+    const next = safeTemplates.shift();
+    if (next) push(next);
+  }
+
+  return titles.slice(0, 5);
+}
+
+function preprocessRawTitles(raw: string, payload: any): string {
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === "object" && "title_candidates" in obj) {
+      obj.title_candidates = normalizeTitleCandidates((obj as any).title_candidates, payload);
+      return JSON.stringify(obj);
+    }
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
+function buildFinal(llm: DraftNaverLLMResponse, debug?: { run_id?: string }) {
+  const normalizedLines = normalizeMdLines(llm.body_md_lines);
+  const body_md = normalizedLines.join("\n");
   const body_html = mdToHtml(body_md);
-  return DraftNaverResponseSchema.parse({
+
+  if (process.env.DEBUG_AGENT === "1" && debug) {
+    const blankCount = normalizedLines.filter((l) => l === "").length;
+    const headingCount = normalizedLines.filter((l) => /^#{2,3}\s+/.test(l.trim())).length;
+    // eslint-disable-next-line no-console
+    console.log("[DraftNaverAgent] md_structure", {
+      run_id: debug.run_id,
+      lines: normalizedLines.length,
+      blank_lines: blankCount,
+      headings: headingCount,
+      body_md_len: body_md.length,
+    });
+  }
+
+  const data = DraftNaverResponseSchema.parse({
     title_candidates: llm.title_candidates ?? [],
     body_md,
     body_html,
   });
+  return { data, normalizedLines };
 }
 
-const FALLBACK_SIGNATURE = JSON.stringify(toFinal(fallbackDraftNaver({})));
+const FALLBACK_SIGNATURE = JSON.stringify(buildFinal(fallbackDraftNaver({})).data);
 
 export class DraftNaverAgent implements Agent<any, DraftNaverResponse> {
   name = "draftNaver";
@@ -83,7 +156,7 @@ export class DraftNaverAgent implements Agent<any, DraftNaverResponse> {
 
     // mock / non-openai → fallback but cache OK
     if (ctx.llm_mode !== "openai") {
-      const data = toFinal(fallbackDraftNaver(input));
+      const { data } = buildFinal(fallbackDraftNaver(input));
       rt.cache.set(cacheKey, data);
       return {
         ok: true,
@@ -112,7 +185,7 @@ export class DraftNaverAgent implements Agent<any, DraftNaverResponse> {
         // eslint-disable-next-line no-console
         console.error("[DraftNaverAgent] LLM failed", e);
       }
-      const data = toFinal(fallbackDraftNaver(input));
+      const { data } = buildFinal(fallbackDraftNaver(input));
       debugLog("DraftNaverAgent", "skip cache set reason=LLM_ERROR(openai)", { cacheKey, run_id: ctx.run_id });
       return {
         ok: true,
@@ -127,8 +200,9 @@ export class DraftNaverAgent implements Agent<any, DraftNaverResponse> {
       };
     }
 
+    const preprocessedRaw = preprocessRawTitles(raw, input);
     const guarded = await jsonGuard<DraftNaverLLMResponse>({
-      raw,
+      raw: preprocessedRaw,
       schema: DraftNaverLLMResponseSchema,
       repair: async ({ raw: badRaw }) => {
         const repairSystem = prompts.repair;
@@ -160,7 +234,13 @@ export class DraftNaverAgent implements Agent<any, DraftNaverResponse> {
       maxRepairAttempts: 2,
     });
 
-    const data = toFinal(guarded.data);
+    const normalizedTitles = normalizeTitleCandidates(guarded.data.title_candidates, input);
+    const guardedData: DraftNaverLLMResponse = {
+      ...guarded.data,
+      title_candidates: normalizedTitles,
+    };
+
+    const { data, normalizedLines } = buildFinal(guardedData, { run_id: ctx.run_id });
     if (guarded.used_fallback) {
       debugLog("DraftNaverAgent", "fallback reason=JSON_GUARD_FALLBACK");
     }
@@ -180,7 +260,7 @@ export class DraftNaverAgent implements Agent<any, DraftNaverResponse> {
       console.log("[DraftNaverAgent] output_sizes", {
         run_id: ctx.run_id,
         title_count: data.title_candidates.length,
-        md_lines: guarded.data.body_md_lines?.length ?? 0,
+        md_lines: normalizedLines.length,
         body_md_len: data.body_md.length,
         body_html_len: data.body_html.length,
       });

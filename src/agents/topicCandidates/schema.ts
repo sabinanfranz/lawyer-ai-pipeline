@@ -22,7 +22,7 @@ export const TopicCandidatesResponseSchema = z.object({
   normalized_brief: z.object({
     persona_summary: z.string(),
     pain_summary: z.string(),
-    assumptions: z.tuple([z.string(), z.string()]),
+    assumptions: z.array(z.string()).min(2).max(4),
   }),
   candidates: z.array(TopicCandidateSchema).length(7),
   top3_recommendations: z.array(z.object({ id: z.number().int(), why: z.string() })).length(3),
