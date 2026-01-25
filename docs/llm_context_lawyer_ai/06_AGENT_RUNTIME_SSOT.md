@@ -24,6 +24,7 @@ Last updated: 2026-01-21
 - OpenAI API style: `OPENAI_API_STYLE`(`auto|chat|responses`), 기본 auto는 gpt-5* 계열을 responses API로 라우팅하고 나머지는 chat completions 사용. `X-Client-Request-Id` 헤더에 run_id를 전송.
 - Token 설정: chat → `max_completion_tokens`(OPENAI_MAX_COMPLETION_TOKENS), responses → `max_output_tokens`(OPENAI_MAX_OUTPUT_TOKENS), `max_tokens_override`로 per-call 상향 가능.
 - 빈 content + finish_reason=length + reasoning_tokens만 소비된 경우 한 번 토큰을 두 배로 높여 재시도.
+- DraftNaverAgent는 LLM 출력으로 `title_candidates + body_md_lines`만 받고, 서버에서 `body_md_lines.join("\n")` 후 `mdToHtml`로 HTML을 결정적으로 생성해 저장/노출함(LLM HTML 미사용).
 
 ## 캐시
 - 전역 in-memory `CacheStore` (HMR에서도 유지 시도)
@@ -41,6 +42,5 @@ Last updated: 2026-01-21
 
 ## Fallback 캐시 정책(openai 모드)
 - openai 모드에서 LLM 호출 실패(LLM_ERROR)나 jsonGuard fallback(JSON_GUARD_FALLBACK) 결과는 캐시하지 않음
-  - 적용: TopicCandidatesAgent, ComplianceRewriteAgent
+  - 적용: TopicCandidatesAgent, DraftNaverAgent, ComplianceRewriteAgent
   - mock/비-openai 모드에서는 fallback 결과를 캐시(개발 편의)
-  - DraftNaverAgent는 현재 fallback-only지만 동일 정책을 유지하도록 주석으로 명시
