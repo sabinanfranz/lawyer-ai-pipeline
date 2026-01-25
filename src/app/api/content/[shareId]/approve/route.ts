@@ -7,20 +7,33 @@ export const runtime = "nodejs";
 export async function POST(_req: Request, { params }: { params: Promise<{ shareId: string }> }) {
   const requestId = newRequestId();
   const { shareId } = await params;
+  if (!shareId || shareId === "undefined") {
+    console.warn("[API_APPROVE] invalid shareId", { shareId, requestId });
+    return fail({
+      code: "INVALID_INPUT",
+      message: "Invalid shareId",
+      status: 400,
+      requestId,
+    });
+  }
   const repo = getContentRepo();
   const record = await repo.get(shareId);
 
-  if (!record) return fail({ code: "NOT_FOUND", message: "콘텐츠를 찾을 수 없습니다.", status: 404, requestId });
+  if (!record) {
+    console.warn("[API_APPROVE] not found", { shareId, requestId });
+    return fail({ code: "NOT_FOUND", message: "콘텐츠를 찾을 수 없습니다.", status: 404, requestId });
+  }
 
   // idempotent
   if (record.revised && record.compliance_report) {
+    console.log("[API_APPROVE] idempotent-return", { shareId, requestId });
     return ok(record, 200);
   }
 
   const result = await runAgent(
     "complianceRewrite",
     { draft: record.draft, must_avoid: record.intake.must_avoid ?? "" },
-    { variant_key: "default", prompt_version: "v1", scope_key: record.shareId }
+    { variant_key: "default", prompt_version: "v2", scope_key: record.shareId }
   );
 
   if (!result.ok) {

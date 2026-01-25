@@ -3,7 +3,7 @@ import { z } from "zod";
 // LLM output schema (line-based Markdown)
 export const DraftNaverLLMResponseSchema = z.object({
   title_candidates: z.array(z.string().min(1)).min(1),
-  body_md_lines: z.array(z.string()),
+  body_md_lines: z.array(z.string().max(4000)).min(10).max(200),
 });
 
 export type DraftNaverLLMResponse = z.infer<typeof DraftNaverLLMResponseSchema>;

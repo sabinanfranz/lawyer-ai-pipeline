@@ -32,7 +32,12 @@ export class DraftNaverAgent implements Agent<any, DraftNaverResponse> {
   version = "v1";
 
   async run(input: any, ctx: AgentContext, rt: AgentRuntime): Promise<AgentResult<DraftNaverResponse>> {
-    const canonical = canonicalizeJson(input);
+    const inputForHash = {
+      intake: input?.intake,
+      selected_candidate: input?.selected_candidate,
+      normalized_brief: input?.normalized_brief,
+    };
+    const canonical = canonicalizeJson(inputForHash);
     const inputHash = sha256(canonical);
     const cacheKey = `${this.name}:${this.version}:${ctx.variant_key}:${ctx.prompt_version}:${ctx.scope_key}:${inputHash}`;
 
@@ -168,6 +173,17 @@ export class DraftNaverAgent implements Agent<any, DraftNaverResponse> {
       });
     } else {
       rt.cache.set(cacheKey, data);
+    }
+
+    if (process.env.DEBUG_AGENT === "1") {
+      // eslint-disable-next-line no-console
+      console.log("[DraftNaverAgent] output_sizes", {
+        run_id: ctx.run_id,
+        title_count: data.title_candidates.length,
+        md_lines: guarded.data.body_md_lines?.length ?? 0,
+        body_md_len: data.body_md.length,
+        body_html_len: data.body_html.length,
+      });
     }
 
     return {

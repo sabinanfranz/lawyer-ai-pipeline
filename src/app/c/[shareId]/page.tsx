@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -8,8 +9,9 @@ import { Loader } from "@/components/ui/Loader";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import type { ContentRecord } from "@/server/repositories/contentRepo";
 
-export default function ContentSharePage({ params }: { params: { shareId: string } }) {
-  const shareId = params.shareId;
+export default function ContentSharePage({ params }: { params: Promise<{ shareId: string }> }) {
+  // Next 15+ client components receive params as a Promise; unwrap via React.use
+  const { shareId } = React.use(params);
   const [data, setData] = useState<ContentRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
@@ -24,7 +26,7 @@ export default function ContentSharePage({ params }: { params: { shareId: string
   });
 
   async function fetchContent() {
-    if (!shareId) {
+    if (!shareId || shareId === "undefined") {
       setError("유효하지 않은 링크입니다.");
       setLoading(false);
       return;

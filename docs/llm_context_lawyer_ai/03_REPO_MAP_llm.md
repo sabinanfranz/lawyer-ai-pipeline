@@ -1,4 +1,4 @@
-Last updated: 2026-01-20
+Last updated: 2026-01-21
 
 # 03_REPO_MAP_llm
 
@@ -9,5 +9,5 @@ Last updated: 2026-01-20
 | agent_core | `src/agent_core/*` (canonicalize/hash/cache/promptStore/llm/jsonGuard/orchestrator/telemetry/types) |
 | agents | `src/agents/topicCandidates/*`, `src/agents/draftNaver/*`, `src/agents/complianceRewrite/*` |
 | repo/db | `src/server/repositories/*`, `src/server/db/prisma.ts`, `prisma/schema.prisma` |
-| prompts | `prompts/topic_candidates/default/v1/*`, `prompts/draft_naver/default/v1/*`, `prompts/compliance_rewrite/default/v1/*` |
+| prompts | `prompts/topic_candidates/default/v1/*`, `prompts/topic_candidates/default/v2/*`, `prompts/draft_naver/default/v1/*`, `prompts/draft_naver/default/v2/*`, `prompts/compliance_rewrite/default/v1/*`, `prompts/compliance_rewrite/default/v2/*` |
 | tests | `src/**/*.test.ts`, `vitest.config.ts` |
