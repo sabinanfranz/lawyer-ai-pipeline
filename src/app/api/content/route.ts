@@ -40,7 +40,7 @@ export async function POST(req: Request) {
 
   const result = await runAgent("draftNaver", agentInput, {
     variant_key: "default",
-    prompt_version: "v1",
+    prompt_version: "v2",
     scope_key: shareId,
   });
 

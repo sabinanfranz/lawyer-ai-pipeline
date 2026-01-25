@@ -1,9 +1,19 @@
-import type { DraftNaverOutput } from "./schema";
+import type { DraftNaverLLMResponse } from "./schema";
 
-export function fallbackDraftNaver(): DraftNaverOutput {
+export function fallbackDraftNaver(_payload: any): DraftNaverLLMResponse {
   return {
-    title_candidates: ["(예시) 체크리스트로 정리하는 B2B 리스크", "(예시) 분쟁 초입에서 먼저 확인할 것"],
-    body_md: "## (예시) 본문\n\n- 포인트 1\n- 포인트 2\n\n> 디스클레이머: 일반 정보 제공 목적입니다.",
-    body_html: "<h2>(예시) 본문</h2><ul><li>포인트 1</li><li>포인트 2</li></ul><p><em>디스클레이머: 일반 정보 제공 목적입니다.</em></p>",
+    title_candidates: ["(fallback) 네이버 블로그 초안 제목 1", "(fallback) 제목 2", "(fallback) 제목 3"],
+    body_md_lines: [
+      "# (fallback) 네이버 블로그 초안",
+      "",
+      "현재 LLM 응답을 정상적으로 생성하지 못해, 임시 초안을 표시합니다.",
+      "",
+      "## 체크 포인트",
+      "- 입력값이 과도하게 길지 않은지 확인",
+      "- 금지 표현(‘전문’, ‘1위’, ‘무료상담’, ‘승소율’ 등)이 포함되지 않았는지 확인",
+      "",
+      "## 안내",
+      "이 글은 일반 정보 제공 목적이며, 구체적 사안은 사실관계에 따라 달라질 수 있습니다.",
+    ],
   };
 }

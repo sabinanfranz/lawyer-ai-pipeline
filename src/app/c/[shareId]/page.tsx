@@ -24,6 +24,11 @@ export default function ContentSharePage({ params }: { params: { shareId: string
   });
 
   async function fetchContent() {
+    if (!shareId) {
+      setError("유효하지 않은 링크입니다.");
+      setLoading(false);
+      return;
+    }
     setError(null);
     setLoading(true);
     try {

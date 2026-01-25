@@ -8,6 +8,7 @@ import type { DraftNaverOutput } from "@/agents/draftNaver/schema";
 
 import {
   ComplianceRewriteLlmSchema,
+  ComplianceRewriteOutputSchema,
   type ComplianceRewriteLlmOutput,
   type ComplianceRewriteOutput,
 } from "./schema";
@@ -56,12 +57,15 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
     // cache hit
     const cached = rt.cache.get<unknown>(cacheKey);
     if (cached) {
-      // 캐시에는 최종 output 저장
-      return {
-        ok: true,
-        data: cached as ComplianceRewriteOutput,
-        meta: { used_fallback: false, cache_hit: true, cache_key: cacheKey, input_hash: inputHash },
-      };
+      const parsedCached = ComplianceRewriteOutputSchema.safeParse(cached);
+      if (parsedCached.success) {
+        return {
+          ok: true,
+          data: parsedCached.data,
+          meta: { used_fallback: false, cache_hit: true, cache_key: cacheKey, input_hash: inputHash },
+        };
+      }
+      console.warn("[ComplianceRewriteAgent] cache value invalid → ignore", { cacheKey, run_id: ctx.run_id });
     }
 
     // 1) Facts Builder (SSOT)
@@ -106,10 +110,26 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
       draft_md: draft.body_md,
       draft_html: draft.body_html,
     });
+    const system = prompts.system;
+
+    if (process.env.DEBUG_AGENT === "1") {
+      // eslint-disable-next-line no-console
+      console.log("[ComplianceRewriteAgent] prompt_sizes", {
+        run_id: ctx.run_id,
+        system_len: system?.length ?? 0,
+        user_len: user?.length ?? 0,
+        repair_system_len: prompts.repair?.length ?? 0,
+      });
+    }
 
     let raw = "";
     try {
-      raw = await rt.llm.generateText({ system: prompts.system, user, run_id: ctx.run_id });
+      raw = await rt.llm.generateText({
+        system,
+        user,
+        run_id: ctx.run_id,
+        max_tokens_override: 6000,
+      });
     } catch {
       // LLM 호출 실패 → fallback
       if (ctx.llm_mode !== "openai") {
@@ -141,7 +161,20 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
           `아래 출력은 JSON 스키마를 만족하지 않습니다. 반드시 유효한 JSON만 반환하세요.\n\n` +
           `--- BROKEN OUTPUT ---\n${badRaw}\n\n` +
           `--- REQUIRED SCHEMA ---\n{ "revised_md": "...", "revised_html": "..." }\n`;
-        return await rt.llm.generateText({ system: prompts.repair, user: repairUser, run_id: ctx.run_id });
+        if (process.env.DEBUG_AGENT === "1") {
+          // eslint-disable-next-line no-console
+          console.log("[ComplianceRewriteAgent] repair_prompt_sizes", {
+            run_id: ctx.run_id,
+            system_len: prompts.repair?.length ?? 0,
+            user_len: repairUser.length,
+          });
+        }
+        return await rt.llm.generateText({
+          system: prompts.repair,
+          user: repairUser,
+          run_id: ctx.run_id,
+          max_tokens_override: 6000,
+        });
       },
       fallback: () => ({ revised_md: fallbackOut.revised_md, revised_html: fallbackOut.revised_html }),
       maxRepairAttempts: 2,

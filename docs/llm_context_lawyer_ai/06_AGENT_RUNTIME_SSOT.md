@@ -21,6 +21,9 @@ Last updated: 2026-01-21
 - `effectiveLlmMode()`: LLM_MODE=openai + OPENAI_API_KEY 있을 때만 openai, 아니면 mock으로 강등
 - MockLlmClient는 항상 오류를 던져 fallback/캐시 경로로 유도
 - DEBUG_AGENT=1이면 최초 1회 `LLM_MODE/OPENAI_KEY 존재 여부/effective`를 로그로 남김(mask 처리)
+- OpenAI API style: `OPENAI_API_STYLE`(`auto|chat|responses`), 기본 auto는 gpt-5* 계열을 responses API로 라우팅하고 나머지는 chat completions 사용. `X-Client-Request-Id` 헤더에 run_id를 전송.
+- Token 설정: chat → `max_completion_tokens`(OPENAI_MAX_COMPLETION_TOKENS), responses → `max_output_tokens`(OPENAI_MAX_OUTPUT_TOKENS), `max_tokens_override`로 per-call 상향 가능.
+- 빈 content + finish_reason=length + reasoning_tokens만 소비된 경우 한 번 토큰을 두 배로 높여 재시도.
 
 ## 캐시
 - 전역 in-memory `CacheStore` (HMR에서도 유지 시도)

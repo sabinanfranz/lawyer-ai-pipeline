@@ -13,7 +13,7 @@ npm run dev
 
 ## OpenAI 모드 (선택)
 - `.env`: `LLM_MODE=openai`, `OPENAI_API_KEY` 설정
-- gpt-5 계열 권장 값: `OPENAI_API_STYLE=auto`, `OPENAI_MAX_COMPLETION_TOKENS=8000`, `OPENAI_MAX_OUTPUT_TOKENS=8000`
+- gpt-5 계열 권장 값: `OPENAI_API_STYLE=auto`, `OPENAI_MAX_COMPLETION_TOKENS=8000`, `OPENAI_MAX_OUTPUT_TOKENS=8000`, `OPENAI_MODEL=gpt-5-mini`, `OPENAI_TIMEOUT_MS=120000`
 - `npm run dev`
 
 ## Database (선택, 권장)
