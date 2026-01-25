@@ -1,67 +1,84 @@
-입력값(JSON):
+아래 payload_json은 (업종/직무/이슈단계/고충/목표/제안 자료/회피 표현 등)을 담고 있다.
+이 입력을 바탕으로 네이버 블로그용 “주제 후보 7개 + Top3 추천”을 생성하라.
+
+[INPUT_JSON]
 {{payload_json}}
+[/INPUT_JSON]
 
-요구사항(엄수):
-0) 출력은 반드시 JSON만. (설명/마크다운/코드펜스 금지)
-1) 위 입력을 2문장으로 정리한 normalized_brief를 만든다.
-   - persona_summary: 업종 + 독자 역할이 한 문장에 드러나게
-   - pain_summary: 이슈 단계 + pain_picker(최대2) 중심으로 “돈/시간/리스크” 관점으로 번역
-   - assumptions: 정확히 2개. (입력에 없는 것은 “가정”으로만, 단정 금지)
+[출력 — JSON만]
+아래 스키마를 정확히 지켜서 유효한 JSON만 반환하라.
 
-2) 글 주제 후보 7개를 만든다.
-   - 후보는 입력의 issue_stage, pain_picker, content_goal, offer_material을 강하게 반영.
-   - must_avoid가 있으면 그 단어/유사표현은 제목/훅/CTA 어디에도 쓰지 말 것.
-   - 7개 후보는 서로 중복되지 않게(같은 말 바꿔치기 금지). 가능하면 하위 주제를 달리해 클러스터로 구성.
-
-3) 각 후보는 아래 필드를 모두 포함한다:
-- id: 1~7의 정수(중복 금지)
-- title_search: 검색형 제목(롱테일 키워드 포함)
-- title_share: 공유형 제목(피드에서 저장/공유 유도)
-- smartblock_intent: reaction_response|info_exploration|case_analysis|checklist_template
-- content_role: cluster|pillar
-- hook: 돈/시간/리스크 관점 1문장(첫 문장 훅)
-- risk_solved: 이 글이 줄이는 리스크 1줄
-- format: checklist|guide|faq|copy_examples
-- primary_keyword: 네이버 롱테일 키워드 1개(한국어 검색어)
-- longtail_keywords: 정확히 3개 배열(연관 롱테일)
-- deliverable: 제공자료(offer_material)와 연결된 “받아가는 것” 1줄
-- cta_one: 상담 유도 금지. “자료 요청/자가진단” 기반 CTA 한 문장(하나만)
-- difficulty: 하|중|상
-- risk_level: 하|중|상
-- hitl_points: 정확히 2개 배열(변호사 검수 포인트. 예: 최신 개정/가이드/판례/업종 특수성 확인 등)
-
-4) 마지막에 top3_recommendations(정확히 3개)을 만든다:
-- { "id": number, "why": string }
-- 기준을 why에 반영:
-  (a) 진성 리드 가능성 (b) 작성 난이도 (c) 컴플라이언스 안전성 (d) 리퍼포징 적합성
-
-출력 JSON 스키마(형태를 반드시 유지):
 {
   "normalized_brief": {
-    "persona_summary": "",
-    "pain_summary": "",
-    "assumptions": ["", ""]
+    "persona_summary": "string",
+    "pain_summary": "string",
+    "assumptions": ["string"]
   },
   "candidates": [
     {
       "id": 1,
-      "title_search": "",
-      "title_share": "",
+      "title_search": "string",
+      "title_share": "string",
       "smartblock_intent": "reaction_response|info_exploration|case_analysis|checklist_template",
-      "content_role": "cluster|pillar",
-      "hook": "",
-      "risk_solved": "",
+      "content_role": "pillar|cluster",
+      "hook": "string",
+      "primary_keyword": "string",
+      "longtail_keywords": ["string","string","string"],
       "format": "checklist|guide|faq|copy_examples",
-      "primary_keyword": "",
-      "longtail_keywords": ["", "", ""],
-      "deliverable": "",
-      "cta_one": "",
       "difficulty": "하|중|상",
       "risk_level": "하|중|상",
-      "hitl_points": ["", ""]
+      "risk_solved": "string",
+      "cta_one": "string",
+      "deliverable": "string",
+      "hitl_points": ["string","string"]
     }
   ],
   "top3_recommendations": [
-    { "id": 1, "why": "" }
+    { "id": 1, "why": "string" }
   ]
 }
+
+[반드시 만족]
+- normalized_brief:
+  - persona_summary: 1문장
+  - pain_summary: 1문장(돈/시간/운영 리스크 관점 포함)
+  - assumptions: 2~4개
+
+- candidates:
+  - 정확히 7개
+  - id는 1..7
+  - 1번은 content_role="pillar"
+  - 2~7번은 content_role="cluster"
+  - 7개는 같은 큰 주제(토픽 클러스터) 안에서만 확장(잡주제 혼합 금지)
+  - longtail_keywords는 정확히 3개(중복 금지)
+  - hitl_points는 정확히 2개
+
+- smartblock_intent/format/difficulty/risk_level은 system에 정의된 허용값만 사용
+
+[top3_recommendations]
+- 정확히 3개
+- id는 candidates의 id 중에서만 선택
+- why는 1~2문장: (리드 전환 가능성 + 제작 난이도 + 컴플라이언스 안전성) 관점으로 설명
+- 추천 3개는 서로 너무 비슷하지 않게(형태/format이 2개 이상 겹치지 않게) 구성
+
+[이슈 단계별 가중치(힌트)]
+- issue_stage=예방:
+  - smartblock_intent는 checklist_template 비중을 높여라(최소 4개 권장)
+  - format은 checklist/copy_examples 비중을 높여라
+- issue_stage=진행 중:
+  - reaction_response 비중을 높여라(초기 대응/증빙/커뮤니케이션)
+  - format은 guide/faq 비중을 높여라
+- issue_stage=사후:
+  - case_analysis 비중을 포함하되, ‘단정적 성공담’ 금지
+  - 재발 방지/프로세스 개선 관점의 guide/faq로 안전하게 설계하라
+
+[페르소나 힌트(키워드 톤 조정)]
+- CEO/대표: 포괄적 키워드 + “리스크 예방 체크리스트/경영자 가이드” 톤
+- HR/인사: 절차/기준/문서 중심(규정·평가·통지·증빙 등)
+- CFO/재무: 비용/정산/채권/지급지연 + 롱테일(조건/절차/증빙) 톤
+- 사내변호사/법무팀: 조항/리스크 체크/계약서 문구 + 롱테일 톤
+
+[최종 체크]
+- must_avoid 표현이 있으면 절대 포함하지 마라.
+- 금지어(전문/무료상담/승소율/결과보장/최고/유일/100% 등) 포함 금지.
+- 출력은 JSON만.

@@ -43,6 +43,8 @@ describe("TopicCandidatesAgent", () => {
 
     expect(r.data.candidates).toHaveLength(7);
     expect(r.data.top3_recommendations).toHaveLength(3);
+    expect(r.data.normalized_brief.assumptions.length).toBeGreaterThanOrEqual(2);
+    expect(r.data.normalized_brief.assumptions.length).toBeLessThanOrEqual(4);
 
     for (const c of r.data.candidates) {
       expect(c.longtail_keywords).toHaveLength(3);

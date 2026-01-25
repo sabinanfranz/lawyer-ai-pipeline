@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // LLM output schema (line-based Markdown)
 export const DraftNaverLLMResponseSchema = z.object({
-  title_candidates: z.array(z.string().min(1)).min(1),
+  title_candidates: z.array(z.string().min(1)).min(3).max(5),
   body_md_lines: z.array(z.string().max(4000)).min(10).max(200),
 });
 
@@ -10,7 +10,7 @@ export type DraftNaverLLMResponse = z.infer<typeof DraftNaverLLMResponseSchema>;
 
 // Final output schema (what API/UI/DB expects)
 export const DraftNaverResponseSchema = z.object({
-  title_candidates: z.array(z.string()),
+  title_candidates: z.array(z.string().min(1)).min(3).max(5),
   body_md: z.string(),
   body_html: z.string(),
 });
