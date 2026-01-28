@@ -30,19 +30,16 @@ const input = {
 };
 
 describe("DraftThreadsAgent fallback (mock mode)", () => {
-  it("returns thread with required prefixes (3-post or 5-post) and no banned wording", async () => {
+  it("returns thread with required 3-post prefixes and no banned wording", async () => {
     const agent = new DraftThreadsAgent();
     const res = await agent.run(input, ctx, runtime);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const { data } = res;
     const lines = data.body_md.split("\n");
-    expect(lines.length).toBeGreaterThanOrEqual(3);
-    const variants = [
-      ["[1/3]", "[2/3]", "[3/3]"],
-      ["[1/5]", "[2/5]", "[3/5]", "[4/5]", "[5/5]"],
-    ];
-    const hasVariant = variants.some((v) => v.every((p) => lines.some((l) => l.startsWith(p))));
+    expect(lines.length).toBe(3);
+    const variant = ["[1/3]", "[2/3]", "[3/3]"];
+    const hasVariant = variant.every((p) => lines.some((l) => l.startsWith(p)));
     expect(hasVariant).toBe(true);
 
     const banned = ["전문", "승소율", "무료 상담", "최고"];

@@ -2,7 +2,15 @@ import { z } from "zod";
 
 export const DraftThreadsLLMResponseSchema = z.object({
   title_candidates: z.array(z.string().min(1)).min(3).max(6),
-  body_md_lines: z.array(z.string().max(4000)).min(3).max(50),
+  body_md_lines: z
+    .array(
+      z
+        .string()
+        .max(4000)
+        .refine((v) => !v.includes("\n"), { message: "body_md_lines must be single-line" })
+    )
+    .min(3)
+    .max(3),
 });
 
 export type DraftThreadsLLMResponse = z.infer<typeof DraftThreadsLLMResponseSchema>;

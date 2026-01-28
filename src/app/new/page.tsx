@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Loader } from "@/components/ui/Loader";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { useTopBar } from "@/components/topbar/TopBarContext";
 
 import {
   INDUSTRIES,
@@ -21,28 +22,36 @@ import type { TopicCandidatesResponse, TopicCandidate } from "@/agents/topicCand
 
 type Step = 1 | 2;
 
+const PREFILL_KEY = "WAL_PREFILL_INTAKE";
+const DEFAULT_INTAKE: IntakeInput = {
+  industry: INDUSTRIES[0],
+  target_role: TARGET_ROLES[0],
+  issue_stage: ISSUE_STAGES[0],
+  pain_picker: [],
+  content_goal: CONTENT_GOALS[0],
+  offer_material: OFFER_MATERIALS[0],
+  pain_sentence: "",
+  experience_seed: "",
+  must_avoid: "",
+};
+
 export default function NewPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { setTopBarConfig } = useTopBar();
   const [step, setStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState<"candidates" | "drafts" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [prefillNotice, setPrefillNotice] = useState(false);
 
-  const [intake, setIntake] = useState<IntakeInput>({
-    industry: INDUSTRIES[0],
-    target_role: TARGET_ROLES[0],
-    issue_stage: ISSUE_STAGES[0],
-    pain_picker: [],
-    content_goal: CONTENT_GOALS[0],
-    offer_material: OFFER_MATERIALS[0],
-    pain_sentence: "",
-    experience_seed: "",
-    must_avoid: "",
-  });
+  const [intake, setIntake] = useState<IntakeInput>(DEFAULT_INTAKE);
 
   const [topicCandidates, setTopicCandidates] = useState<TopicCandidatesResponse | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
+  const [candidatesIntakeSnapshot, setCandidatesIntakeSnapshot] = useState<IntakeInput | null>(null);
   const hasSelection = selectedCandidateId !== null;
+  const prefillAppliedRef = useRef(false);
 
   const cx = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ");
   const isSelected = (id: number) => selectedCandidateId === id;
@@ -76,6 +85,68 @@ export default function NewPage() {
     });
   }
 
+  const handleResetIntake = useCallback(() => {
+    setIntake(DEFAULT_INTAKE);
+    setError(null);
+  }, []);
+
+  const handleEditInput = useCallback(() => {
+    setStep(1);
+  }, []);
+
+  const handleStartOver = useCallback(() => {
+    setStep(1);
+    setIntake(DEFAULT_INTAKE);
+    setTopicCandidates(null);
+    setSelectedCandidateId(null);
+    setError(null);
+    setCandidatesIntakeSnapshot(null);
+  }, []);
+
+  function isProbablyIntake(x: any): boolean {
+    if (!x || typeof x !== "object") return false;
+    if (typeof x.industry !== "string") return false;
+    if (typeof x.target_role !== "string") return false;
+    if (typeof x.issue_stage !== "string") return false;
+    if (!Array.isArray(x.pain_picker)) return false;
+    if (typeof x.content_goal !== "string") return false;
+    if (typeof x.offer_material !== "string") return false;
+    return true;
+  }
+
+  useEffect(() => {
+    if (prefillAppliedRef.current) return;
+    const prefill = searchParams.get("prefill");
+    if (prefill !== "1") return;
+
+    prefillAppliedRef.current = true;
+
+    try {
+      const raw = localStorage.getItem(PREFILL_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+      if (!isProbablyIntake(parsed)) return;
+
+      setIntake(parsed);
+      setStep(1);
+      setTopicCandidates(null);
+      setSelectedCandidateId(null);
+      setCandidatesIntakeSnapshot(null);
+      setError(null);
+      setPrefillNotice(true);
+    } catch {
+      // ignore parse/storage errors
+    } finally {
+      try {
+        localStorage.removeItem(PREFILL_KEY);
+      } catch {
+        // ignore
+      }
+      router.replace("/new");
+    }
+  }, [searchParams, router]);
+
   async function generateCandidates() {
     setError(null);
     setLoading(true);
@@ -97,6 +168,7 @@ export default function NewPage() {
       setTopicCandidates(data);
       setSelectedCandidateId(null);
       setStep(2);
+      setCandidatesIntakeSnapshot(JSON.parse(JSON.stringify(intake)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
     } finally {
@@ -155,6 +227,51 @@ export default function NewPage() {
       ? "선택한 주제로 네이버/LinkedIn/Threads 초안을 만들고 있어요. 완료되면 자동으로 이동합니다."
       : "잠시만 기다려 주세요.";
 
+  const intakeDirty = useMemo(() => JSON.stringify(intake) !== JSON.stringify(DEFAULT_INTAKE), [intake]);
+  const isChangedSinceCandidates = useMemo(() => {
+    if (!candidatesIntakeSnapshot) return false;
+    return JSON.stringify(intake) !== JSON.stringify(candidatesIntakeSnapshot);
+  }, [intake, candidatesIntakeSnapshot]);
+
+  useLayoutEffect(() => {
+    if (step === 1) {
+      setTopBarConfig({
+        currentStep: "intake",
+        disabledAll: loading,
+        actions: [
+          {
+            kind: "button",
+            label: "초기화",
+            onClick: handleResetIntake,
+            variant: "secondary",
+            confirmText: intakeDirty ? "입력 내용을 초기화할까요?" : undefined,
+          },
+        ],
+      });
+      return;
+    }
+
+    setTopBarConfig({
+      currentStep: "candidates",
+      disabledAll: loading,
+      actions: [
+        {
+          kind: "button",
+          label: "입력 수정",
+          onClick: handleEditInput,
+          variant: "secondary",
+        },
+        {
+          kind: "button",
+          label: "처음부터",
+          onClick: handleStartOver,
+          variant: "secondary",
+          confirmText: "처음부터 다시 진행할까요? 생성된 후보 목록이 사라집니다.",
+        },
+      ],
+    });
+  }, [step, loading, intakeDirty, handleResetIntake, handleEditInput, handleStartOver, setTopBarConfig]);
+
   return (
     <main className="p-6 space-y-4">
       {loading && (
@@ -198,6 +315,13 @@ export default function NewPage() {
 
       {step === 1 && (
         <Card>
+          {prefillNotice && (
+            <div className="mb-3 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              이전 조건을 불러왔습니다. 필요하면 수정 후{" "}
+              <span className="font-medium text-foreground">‘주제 후보 만들기’</span>를 눌러 진행해 주세요.
+            </div>
+          )}
+
           <h2 className="font-semibold mb-4">Step 1) 입력</h2>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -358,6 +482,13 @@ export default function NewPage() {
               {loadingStage === "candidates" ? "후보 생성 중..." : "주제 후보 만들기"}
             </Button>
           </div>
+
+          {step === 1 && topicCandidates && candidatesIntakeSnapshot && isChangedSinceCandidates && (
+            <div className="mt-3 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              입력을 변경하셨습니다. <span className="font-medium text-foreground">‘주제 후보 만들기’</span>를 다시 눌러야
+              변경 내용이 후보에 반영됩니다.
+            </div>
+          )}
         </Card>
       )}
 

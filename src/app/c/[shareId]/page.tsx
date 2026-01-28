@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -9,10 +9,16 @@ import { Loader } from "@/components/ui/Loader";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import type { ContentRecord, ContentRecordMulti } from "@/server/repositories/contentRepo";
 import { CHANNEL_ORDER, CHANNEL_LABEL, type Channel } from "@/shared/channel";
+import { useTopBar } from "@/components/topbar/TopBarContext";
+import { useRouter } from "next/navigation";
+
+const PREFILL_KEY = "WAL_PREFILL_INTAKE";
 
 export default function ContentSharePage({ params }: { params: Promise<{ shareId: string }> }) {
   // Next 15+ client components receive params as a Promise; unwrap via React.use
   const { shareId } = React.use(params);
+  const router = useRouter();
+  const { setTopBarConfig } = useTopBar();
   const [data, setData] = useState<ContentRecordMulti | null>(null);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
@@ -75,6 +81,47 @@ export default function ContentSharePage({ params }: { params: Promise<{ shareId
       setApproving(false);
     }
   }
+
+  const currentStep = useMemo<"drafts" | "review">(() => {
+    if (!data) return "drafts";
+    const hasReviewed =
+      (data.compliance_reports && Object.keys(data.compliance_reports ?? {}).length > 0) ||
+      (data.revised && Object.keys(data.revised ?? {}).length > 0) ||
+      data.status === "revised";
+    return hasReviewed ? "review" : "drafts";
+  }, [data]);
+
+  const handlePrefillStart = useCallback(() => {
+    const intake = data?.intake;
+    if (!intake) {
+      router.push("/new");
+      return;
+    }
+    try {
+      localStorage.setItem(PREFILL_KEY, JSON.stringify(intake));
+    } catch {
+      // ignore storage errors
+    }
+    router.push("/new?prefill=1");
+  }, [data, router]);
+
+  useLayoutEffect(() => {
+    const disabledAll = loading || approving || !data;
+    setTopBarConfig({
+      currentStep,
+      disabledAll,
+      actions: [
+        { kind: "link", label: "새로 만들기", href: "/new", variant: "secondary" },
+        {
+          kind: "button",
+          label: "이 조건으로 새로 시작",
+          onClick: handlePrefillStart,
+          variant: "secondary",
+          disabled: !data?.intake,
+        },
+      ],
+    });
+  }, [setTopBarConfig, currentStep, loading, approving, data, handlePrefillStart]);
 
   return (
     <main className="p-6 space-y-4">

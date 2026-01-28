@@ -55,20 +55,15 @@ function normalizeTitleCandidates(rawTitles: unknown, payload: any): string[] {
 }
 
 function passesThreadShape(lines: string[]): boolean {
-  if (!Array.isArray(lines) || lines.length < 3) return false;
-  const shapes = [
-    ["[1/3]", "[2/3]", "[3/3]"],
-    ["[1/5]", "[2/5]", "[3/5]", "[4/5]", "[5/5]"],
-  ];
-  return shapes.some((req) => {
-    const found = new Set<number>();
-    lines.forEach((l) => {
-      req.forEach((tag, idx) => {
-        if (typeof l === "string" && l.trim().startsWith(tag)) found.add(idx);
-      });
+  if (!Array.isArray(lines) || lines.length !== 3) return false;
+  const required = ["[1/3]", "[2/3]", "[3/3]"];
+  const found = new Set<number>();
+  lines.forEach((l) => {
+    required.forEach((tag, idx) => {
+      if (typeof l === "string" && l.trim().startsWith(tag)) found.add(idx);
     });
-    return found.size === req.length;
   });
+  return found.size === required.length;
 }
 
 function buildFinal(llm: DraftThreadsLLMResponse) {
@@ -186,7 +181,7 @@ export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
           `--- BROKEN OUTPUT ---\n${badRaw}\n\n` +
           `--- REQUIRED ---\n` +
           `- title_candidates: string[] (3~6)\n` +
-          `- body_md_lines: string[] (각 요소는 한 줄, 최소 5줄, [i/5] 형식 권장)\n`;
+          `- body_md_lines: string[] (각 요소는 한 줄, 정확히 3줄, [1/3][2/3][3/3] 접두어)\n`;
 
         return await rt.llm.generateText({
           system: repairSystem,
