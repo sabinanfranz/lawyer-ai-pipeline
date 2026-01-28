@@ -20,9 +20,59 @@ function ensureStringArray(v: unknown): string[] {
   return v.filter((x) => typeof x === "string") as string[];
 }
 
-function ensureIssuesArray(v: unknown): any[] {
-  if (!Array.isArray(v)) return [];
-  return v;
+export function normalizeComplianceIssues(raw: unknown): ComplianceReportPayload["issues"] {
+  if (!Array.isArray(raw)) return [];
+
+  const issues: ComplianceReportPayload["issues"] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const obj = item as Record<string, unknown>;
+
+    const category = String(obj.category ?? "unknown");
+
+    const snippet =
+      typeof obj.snippet === "string"
+        ? obj.snippet
+        : typeof obj.token === "string"
+          ? obj.token
+          : typeof obj.text === "string"
+            ? obj.text
+            : "";
+
+    const reason =
+      typeof obj.reason === "string"
+        ? obj.reason
+        : typeof obj.message === "string"
+          ? obj.message
+          : "";
+
+    const suggestion =
+      typeof obj.suggestion === "string"
+        ? obj.suggestion
+        : typeof obj.fix === "string"
+          ? obj.fix
+          : "";
+
+    issues.push({
+      category,
+      snippet,
+      reason,
+      suggestion,
+    });
+  }
+
+  return issues;
+}
+
+export function normalizeComplianceReport(raw: {
+  riskScore?: unknown;
+  summary?: unknown;
+  issues?: unknown;
+}): ComplianceReportPayload {
+  const risk_score = typeof raw.riskScore === "number" ? raw.riskScore : 0;
+  const summary = typeof raw.summary === "string" ? raw.summary : "";
+  const issues = normalizeComplianceIssues(raw.issues);
+  return { risk_score, summary, issues };
 }
 
 function isUniqueError(e: unknown): e is Prisma.PrismaClientKnownRequestError {
@@ -51,6 +101,8 @@ export class PrismaContentRepo implements ContentRepo {
     const draft = pickPrimary(multi.drafts) ?? firstAvailable(multi.drafts);
     if (!draft) return null;
 
+    const complianceReport = pickPrimary(multi.compliance_reports);
+
     return {
       shareId: multi.shareId,
       status: multi.status,
@@ -61,7 +113,7 @@ export class PrismaContentRepo implements ContentRepo {
       selected_candidate: multi.selected_candidate,
       draft,
       revised: pickPrimary(multi.revised),
-      compliance_report: pickPrimary(multi.compliance_reports),
+      compliance_report: complianceReport,
     };
   }
 
@@ -141,11 +193,7 @@ export class PrismaContentRepo implements ContentRepo {
 
     const compliance_reports: Partial<Record<Channel, ComplianceReportPayload>> = {};
     content.complianceReports.forEach((r) => {
-      compliance_reports[r.channel as Channel] = {
-        risk_score: r.riskScore ?? 0,
-        summary: r.summary ?? "",
-        issues: ensureIssuesArray(r.issues) as any,
-      };
+      compliance_reports[r.channel as Channel] = normalizeComplianceReport(r);
     });
 
     const fullDrafts: Record<Channel, DraftPayload> = {} as any;

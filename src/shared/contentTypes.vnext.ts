@@ -1,6 +1,6 @@
 // vNext content contracts for upcoming multi-channel support.
 // Keeps runtime unchanged while giving future phases stable types.
-import type { Channel } from './channel';
+import type { Channel } from "./channel";
 
 export type Draft = {
   title_candidates: string[];
@@ -13,10 +13,12 @@ export type Revised = {
   revised_html: string;
 };
 
+// API payload shape for compliance issues (SSOT)
 export type ComplianceIssue = {
   category: string;
-  weight: number;
-  matches: string[];
+  snippet: string;
+  reason: string;
+  suggestion: string;
 };
 
 export type ComplianceReport = {
@@ -46,7 +48,7 @@ export function getDraftOrPlaceholder(
 // vNext ContentRecord shape (to be adopted in later phases)
 export type ContentRecordVNext = {
   shareId: string;
-  status: 'drafted' | 'revised';
+  status: "drafted" | "revised";
   createdAt: string;
   updatedAt: string;
 
