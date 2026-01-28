@@ -123,7 +123,7 @@ export class InMemoryContentRepo implements ContentRepo {
       selected_candidate: multi.selected_candidate,
       draft: pick,
       revised: pickPrimary(multi.revised),
-      compliance_report: pickPrimary(multi.compliance_reports),
+      compliance_report: normalizeSingleReport(pickPrimary(multi.compliance_reports)),
     };
   }
 
@@ -219,4 +219,20 @@ function firstAvailable<T>(byChannel?: Partial<Record<Channel, T>>): T | undefin
   if (!byChannel) return undefined;
   const firstKey = Object.keys(byChannel)[0] as Channel | undefined;
   return firstKey ? byChannel[firstKey] : undefined;
+}
+
+function normalizeSingleReport(rep: any): ContentRecord["compliance_report"] {
+  if (!rep) return undefined;
+  const issuesRaw = Array.isArray(rep.issues) ? rep.issues : [];
+  const issues = issuesRaw.map((it: any) => ({
+    category: it?.category ?? "",
+    snippet: it?.snippet ?? (Array.isArray(it?.matches) ? it.matches[0] ?? "" : ""),
+    reason: it?.reason ?? "",
+    suggestion: it?.suggestion ?? "",
+  }));
+  return {
+    risk_score: rep.risk_score ?? 0,
+    summary: rep.summary ?? "",
+    issues,
+  };
 }
