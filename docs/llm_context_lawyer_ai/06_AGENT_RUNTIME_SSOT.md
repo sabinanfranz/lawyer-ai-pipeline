@@ -1,4 +1,4 @@
-Last updated: 2026-01-21
+Last updated: 2026-01-28
 
 # 06_AGENT_RUNTIME_SSOT
 
@@ -25,6 +25,8 @@ Last updated: 2026-01-21
 - Token 설정: chat → `max_completion_tokens`(OPENAI_MAX_COMPLETION_TOKENS), responses → `max_output_tokens`(OPENAI_MAX_OUTPUT_TOKENS), `max_tokens_override`로 per-call 상향 가능.
 - 빈 content + finish_reason=length + reasoning_tokens만 소비된 경우 한 번 토큰을 두 배로 높여 재시도.
 - DraftNaverAgent는 LLM 출력으로 `title_candidates + body_md_lines`만 받고, 서버에서 `body_md_lines.join("\n")` 후 `mdToHtml`로 HTML을 결정적으로 생성해 저장/노출함(LLM HTML 미사용).
+- DraftLinkedin/DraftThreads/Naver draft 호출은 기본적으로 prompt_version=v3을 사용한다.
+- DraftThreadsAgent 출력 스키마: `title_candidates` 3~6개, `body_md_lines`는 정확히 3줄이며 각 줄이 `[1/3] …`, `[2/3] …`, `[3/3] …` 접두어로 시작해야 한다. 접두어/줄 수가 어긋나면 3줄 fallback으로 대체된다.
 
 ## 캐시
 - 전역 in-memory `CacheStore` (HMR에서도 유지 시도)

@@ -1,4 +1,4 @@
-Last updated: 2026-01-27
+Last updated: 2026-01-28
 
 # 07_API_CONTRACTS
 
@@ -17,7 +17,7 @@ Last updated: 2026-01-27
 
 ### POST /api/content
 - 요청: { intake: IntakeSchema, topic_candidates: TopicCandidatesResponse, selected_candidate: TopicCandidate }
-- 처리: DraftNaverAgent 실행 → repo.create → shareId 발급
+- 처리: DraftNaver/LinkedIn/Threads 3개 draft agent를 병렬 실행(prompt_version=v3) → draft 3건 저장 → shareId 발급
 - 응답: { shareId }
 
 ### GET /api/content/{shareId}

@@ -66,6 +66,7 @@ export type CreateDraftsArgs = {
   topic_candidates: TopicCandidatesResponse;
   selected_candidate: TopicCandidate;
   draftsByChannel: PartialByChannel<DraftPayload>;
+  metaByChannel?: PartialByChannel<any>;
 };
 
 export interface ContentRepo {
@@ -82,7 +83,7 @@ export interface ContentRepo {
   setRevisedByChannel(
     shareId: string,
     channel: Channel,
-    patch: { revised_md: string; revised_html: string; report: ContentRecord["compliance_report"] }
+    patch: { revised_md: string; revised_html: string; report: ContentRecord["compliance_report"]; meta?: any }
   ): Promise<ContentRecordMulti | null>;
 }
 

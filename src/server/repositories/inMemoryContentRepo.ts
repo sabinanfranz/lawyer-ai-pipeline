@@ -10,6 +10,7 @@ import type {
 } from "./contentRepo";
 import { PRIMARY_CHANNEL } from "./contentRepo";
 import type { Channel } from "@/shared/channel";
+import { EMPTY_DRAFT } from "@/shared/contentTypes.vnext";
 
 type VersionEntry = { draft?: DraftPayload; revised?: RevisedPayload };
 type VersionsByChannel = Map<Channel, VersionEntry>;
@@ -76,6 +77,7 @@ export class InMemoryContentRepo implements ContentRepo {
     topic_candidates: ContentMeta["topic_candidates"];
     selected_candidate: ContentMeta["selected_candidate"];
     draftsByChannel: Partial<Record<Channel, DraftPayload>>;
+    metaByChannel?: Partial<Record<Channel, any>>;
   }): Promise<void> {
     const row: ContentRow = {
       shareId: args.shareId,
@@ -93,10 +95,14 @@ export class InMemoryContentRepo implements ContentRepo {
     const versionMap = ensureVersionMap(this.versions, args.shareId);
 
     Object.entries(args.draftsByChannel).forEach(([channel, draft]) => {
-      if (!draft) return;
       const ch = channel as Channel;
       const entry = versionMap.get(ch) ?? {};
-      entry.draft = draft;
+      entry.draft = draft ?? EMPTY_DRAFT;
+      versionMap.set(ch, entry);
+    });
+    CHANNELS.forEach((ch) => {
+      const entry = versionMap.get(ch) ?? {};
+      if (!entry.draft) entry.draft = EMPTY_DRAFT;
       versionMap.set(ch, entry);
     });
   }
@@ -132,7 +138,7 @@ export class InMemoryContentRepo implements ContentRepo {
     const revised: Partial<Record<Channel, RevisedPayload>> = {};
     CHANNELS.forEach((ch) => {
       const entry = versionMap.get(ch);
-      if (entry?.draft) drafts[ch] = entry.draft;
+      drafts[ch] = entry?.draft ?? EMPTY_DRAFT;
       if (entry?.revised) revised[ch] = entry.revised;
     });
 
@@ -168,7 +174,7 @@ export class InMemoryContentRepo implements ContentRepo {
   async setRevisedByChannel(
     shareId: string,
     channel: Channel,
-    patch: { revised_md: string; revised_html: string; report: ContentRecord["compliance_report"] }
+    patch: { revised_md: string; revised_html: string; report: ContentRecord["compliance_report"]; meta?: any }
   ): Promise<ContentRecordMulti | null> {
     const row = this.contents.get(shareId);
     if (!row) return null;

@@ -1,4 +1,4 @@
-Last updated: 2026-01-27
+Last updated: 2026-01-28
 
 # 09_TESTING_AND_QA
 
@@ -17,6 +17,7 @@ npm test
 6) /approve 멀티채널: revised/compliance_reports 3채널 생성, 재호출 시 재생성 금지(채널 단위 idempotent)
 7) 금지어 주입 후 approve: 각 채널 revised에서 금지어 제거/완곡화, 디스클레이머 포함
 8) LLM_MODE=openai + 키 없음 → mock/fallback 경로로도 3채널 유효 스키마 반환
+9) DraftThreadsAgent: body_md_lines가 정확히 3줄, `[1/3]~[3/3]` 접두어를 포함하는지 검증
 
 ## 실패 주입 시나리오
 - LLM_MODE=openai + 키 미설정 → fallback으로 drafts/revised가 3채널 모두 유효 스키마 유지

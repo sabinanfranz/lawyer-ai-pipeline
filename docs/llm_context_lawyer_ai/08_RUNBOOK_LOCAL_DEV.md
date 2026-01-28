@@ -1,4 +1,4 @@
-Last updated: 2026-01-27
+Last updated: 2026-01-28
 
 # 08_RUNBOOK_LOCAL_DEV
 
@@ -23,6 +23,11 @@ npx prisma migrate dev
 npm run dev
 ```
 - DATABASE_URL 설정 시 PrismaContentRepo 사용, 없으면 InMemoryContentRepo 사용
+
+## 배포/스타트 스크립트 (Railway 포함)
+- `npm run postinstall` → `prisma generate` (패키지 설치 시 자동 실행)
+- `npm run db:migrate:deploy` → 프로덕션/배포 환경에서 마이그레이션 적용
+- `npm run railway:start` → migrate deploy 후 `npm start` 실행 (Railway startCommand로 사용)
 
 ## 재현 체크리스트
 - 같은 입력으로 /api/topic-candidates 두 번 호출 → openai 정상 응답이면 두 번째 cache_hit=true (openai 모드에서 fallback이면 캐시 안 됨)

@@ -1,8 +1,9 @@
 import { getContentRepo } from "@/server/repositories";
-import { runAgent } from "@/agent_core/orchestrator";
+import { runAgentWithDebug } from "@/agent_core/orchestrator";
 import { fail, ok, newRequestId } from "@/server/errors";
 import { CHANNELS, type Channel } from "@/shared/channel";
 import type { ContentRecordMulti } from "@/server/repositories/contentRepo";
+import { toMetaAgentDebug } from "@/shared/agentDebugMeta";
 
 export const runtime = "nodejs";
 
@@ -50,6 +51,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
     return ok(record, 200);
   }
 
+  const metaBase = {
+    intake: record.intake,
+    topic_candidates: record.topic_candidates,
+    selected_candidate: record.selected_candidate,
+  };
+
   const settled = await Promise.allSettled(
     channelsToRewrite.map(async (channel) => {
       const draftRaw = record.drafts[channel];
@@ -64,13 +71,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
         body_md: safeDraftRaw.body_md ?? "",
         body_html: safeDraftRaw.body_html ?? "",
       };
-      const result = await runAgent(
+      const { result, debug } = await runAgentWithDebug(
         "complianceRewrite",
         { draft, must_avoid: (record.intake as any)?.must_avoid ?? "" },
         { variant_key: channel, prompt_version: "v2", scope_key: record.shareId }
       );
       if (!result.ok) throw new Error("AGENT_FAILED:" + channel);
-      return { channel, data: result.data as any };
+      return { channel, data: result.data as any, debug };
     })
   );
 
@@ -81,12 +88,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
       console.error("[API_APPROVE] compliance rewrite failed", { shareId, requestId, error: s.reason });
       continue;
     }
-    const { channel, data } = s.value;
+    const { channel, data, debug } = s.value;
     try {
       await repo.setRevisedByChannel(record.shareId, channel as Channel, {
         revised_md: data.revised_md,
         revised_html: data.revised_html,
         report: data.report,
+        meta: { ...metaBase, agent_debug: toMetaAgentDebug(debug) },
       });
     } catch (e) {
       console.error("[API_APPROVE] setRevisedByChannel failed", { shareId, channel, requestId, error: String(e) });

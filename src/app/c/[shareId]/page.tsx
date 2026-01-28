@@ -13,6 +13,11 @@ import { useTopBar } from "@/components/topbar/TopBarContext";
 import { useRouter } from "next/navigation";
 
 const PREFILL_KEY = "WAL_PREFILL_INTAKE";
+const EMPTY_DRAFT = {
+  title_candidates: [] as string[],
+  body_md: "",
+  body_html: "",
+};
 
 export default function ContentSharePage({ params }: { params: Promise<{ shareId: string }> }) {
   // Next 15+ client components receive params as a Promise; unwrap via React.use
@@ -141,7 +146,7 @@ export default function ContentSharePage({ params }: { params: Promise<{ shareId
             <DraftBlock
               key={ch}
               channel={ch}
-              draft={data.drafts[ch]}
+              draft={data.drafts?.[ch] ?? EMPTY_DRAFT}
               revised={data.revised?.[ch]}
               report={data.compliance_reports?.[ch]}
             />

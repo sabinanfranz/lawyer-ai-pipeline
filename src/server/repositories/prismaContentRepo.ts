@@ -13,6 +13,7 @@ import {
 } from "./contentRepo";
 import type { ContentStatus } from "@prisma/client";
 import { Prisma } from "@prisma/client";
+import { EMPTY_DRAFT, getDraftOrPlaceholder } from "@/shared/contentTypes.vnext";
 
 function ensureStringArray(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
@@ -82,30 +83,32 @@ export class PrismaContentRepo implements ContentRepo {
       selected_candidate: args.selected_candidate,
     };
 
-    const content = await prisma.content.create({
-      data: {
-        shareId: args.shareId,
-        status: args.status as ContentStatus,
-        ...(args.createdAt ? { createdAt: new Date(args.createdAt) } : {}),
-        ...(args.updatedAt ? { updatedAt: new Date(args.updatedAt) } : {}),
-      },
+    await prisma.$transaction(async (tx) => {
+      const content = await tx.content.create({
+        data: {
+          shareId: args.shareId,
+          status: args.status as ContentStatus,
+          ...(args.createdAt ? { createdAt: new Date(args.createdAt) } : {}),
+          ...(args.updatedAt ? { updatedAt: new Date(args.updatedAt) } : {}),
+        },
+      });
+
+      const draftCreates = CHANNELS.map((channel) => {
+        const draft = getDraftOrPlaceholder(args.draftsByChannel, channel);
+        const meta = args.metaByChannel?.[channel] ?? metaSnapshot;
+        return {
+          contentId: content.id,
+          channel,
+          versionType: "draft" as const,
+          titleCandidates: draft.title_candidates ?? EMPTY_DRAFT.title_candidates,
+          bodyMd: draft.body_md ?? EMPTY_DRAFT.body_md,
+          bodyHtml: draft.body_html ?? EMPTY_DRAFT.body_html,
+          meta,
+        };
+      });
+
+      await tx.contentVersion.createMany({ data: draftCreates });
     });
-
-    const draftCreates = Object.entries(args.draftsByChannel)
-      .filter(([, draft]) => !!draft)
-      .map(([channel, draft]) => ({
-        contentId: content.id,
-        channel: channel as Channel,
-        versionType: "draft" as const,
-        titleCandidates: (draft as DraftPayload).title_candidates,
-        bodyMd: (draft as DraftPayload).body_md,
-        bodyHtml: (draft as DraftPayload).body_html,
-        meta: metaSnapshot,
-      }));
-
-    if (draftCreates.length) {
-      await prisma.contentVersion.createMany({ data: draftCreates });
-    }
   }
 
   async getByShareIdMulti(shareId: string): Promise<ContentRecordMulti | null> {
@@ -145,6 +148,11 @@ export class PrismaContentRepo implements ContentRepo {
       };
     });
 
+    const fullDrafts: Record<Channel, DraftPayload> = {} as any;
+    CHANNELS.forEach((ch) => {
+      fullDrafts[ch] = drafts[ch] ?? EMPTY_DRAFT;
+    });
+
     return {
       shareId: content.shareId,
       status: content.status as any,
@@ -153,7 +161,7 @@ export class PrismaContentRepo implements ContentRepo {
       intake: meta.intake,
       topic_candidates: meta.topic_candidates,
       selected_candidate: meta.selected_candidate,
-      drafts,
+      drafts: fullDrafts,
       revised: Object.keys(revised).length ? revised : undefined,
       compliance_reports: Object.keys(compliance_reports).length ? compliance_reports : undefined,
     };
@@ -171,7 +179,12 @@ export class PrismaContentRepo implements ContentRepo {
     if (!content) return null;
 
     await prisma.$transaction(async (tx) => {
-      try {
+      const existingRevision = await tx.contentVersion.findUnique({
+        where: {
+          contentId_channel_versionType: { contentId: content.id, channel, versionType: "revised" },
+        },
+      });
+      if (!existingRevision) {
         await tx.contentVersion.create({
           data: {
             contentId: content.id,
@@ -180,15 +193,16 @@ export class PrismaContentRepo implements ContentRepo {
             titleCandidates: null,
             bodyMd: patch.revised_md,
             bodyHtml: patch.revised_html,
-            meta: null,
+            meta: patch.meta ?? null,
           },
         });
-      } catch (e) {
-        if (!isUniqueError(e)) throw e;
       }
 
       const report = patch.report ?? { risk_score: 0, summary: "", issues: [] };
-      try {
+      const existingReport = await tx.complianceReport.findUnique({
+        where: { contentId_channel: { contentId: content.id, channel } },
+      });
+      if (!existingReport) {
         await tx.complianceReport.create({
           data: {
             contentId: content.id,
@@ -198,25 +212,17 @@ export class PrismaContentRepo implements ContentRepo {
             issues: report.issues ?? [],
           },
         });
-      } catch (e) {
-        if (!isUniqueError(e)) throw e;
       }
 
-      if (content.status !== "revised") {
-        // status 업데이트는 채널 전체 완료 시점에 결정
+      const revisedChannels = await tx.contentVersion.findMany({
+        where: { contentId: content.id, versionType: "revised" },
+        select: { channel: true },
+      });
+      const allRevised = CHANNELS.every((ch) => revisedChannels.some((v) => v.channel === ch));
+      const targetStatus: ContentStatus = allRevised ? "revised" : "drafted";
+      if (content.status !== targetStatus) {
+        await tx.content.update({ where: { id: content.id }, data: { status: targetStatus } });
       }
-    });
-
-    // 모든 채널 revised 여부 확인 후 status 업데이트
-    const versions = await prisma.contentVersion.findMany({
-      where: { contentId: content.id, versionType: "revised" },
-      select: { channel: true },
-    });
-    const revisedChannels = new Set(versions.map((v) => v.channel as Channel));
-    const allRevised = CHANNELS.every((ch) => revisedChannels.has(ch));
-    await prisma.content.update({
-      where: { id: content.id },
-      data: { status: allRevised ? ("revised" as ContentStatus) : ("drafted" as ContentStatus) },
     });
 
     return this.getByShareIdMulti(shareId);

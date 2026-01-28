@@ -6,6 +6,7 @@ import { registry, type AgentName } from "./registry";
 import { track } from "./telemetry";
 import { effectiveLlmMode } from "@/server/env";
 import { debugLog } from "./debug";
+import { toMetaAgentDebug, type AgentDebugMeta } from "@/shared/agentDebugMeta";
 
 type GlobalRt = AgentRuntime;
 
@@ -27,6 +28,15 @@ export async function runAgent(
   input: unknown,
   overrides?: Partial<Pick<AgentContext, "variant_key" | "prompt_version" | "scope_key">>
 ): Promise<AgentResult<unknown>> {
+  const { result } = await runAgentWithDebug(name, input, overrides);
+  return result;
+}
+
+export async function runAgentWithDebug<T>(
+  name: AgentName,
+  input: unknown,
+  overrides?: Partial<Pick<AgentContext, "variant_key" | "prompt_version" | "scope_key">>
+): Promise<{ result: AgentResult<T>; debug: AgentDebugMeta }> {
   const agent = registry[name]();
   const rt = getGlobalRuntime();
 
@@ -64,5 +74,21 @@ export async function runAgent(
     `${ctx.agent_name} cache_hit=${!!result.meta.cache_hit} used_fallback=${!!result.meta.used_fallback} repaired=${!!result.meta.repaired} latency_ms=${latency}`
   );
 
-  return result;
+  const debug = toMetaAgentDebug({
+    run_id: ctx.run_id,
+    agent_name: ctx.agent_name,
+    agent_version: ctx.agent_version,
+    variant_key: ctx.variant_key,
+    prompt_version: ctx.prompt_version,
+    scope_key: ctx.scope_key,
+    llm_mode: ctx.llm_mode,
+    cache_hit: !!result.meta.cache_hit,
+    used_fallback: !!result.meta.used_fallback,
+    repaired: !!result.meta.repaired,
+    repair_attempts: result.meta.repair_attempts ?? 0,
+    latency_ms: latency,
+    cache_key_prefix: (result.meta.cache_key as string | undefined)?.slice(0, 80),
+  });
+
+  return { result, debug };
 }

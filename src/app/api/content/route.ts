@@ -3,9 +3,11 @@ import { IntakeSchema } from "@/lib/schemas/intake";
 import { TopicCandidatesResponseSchema, TopicCandidateSchema } from "@/agents/topicCandidates/schema";
 import { getContentRepo } from "@/server/repositories";
 import { generateShareId } from "@/lib/utils/shareId";
-import { runAgent } from "@/agent_core/orchestrator";
+import { runAgentWithDebug } from "@/agent_core/orchestrator";
 import { fail, ok, newRequestId, readJson, zodDetails } from "@/server/errors";
 import { CHANNELS, type Channel } from "@/shared/channel";
+import { toMetaAgentDebug } from "@/shared/agentDebugMeta";
+import type { PartialByChannel } from "@/shared/contentTypes.vnext";
 
 export const runtime = "nodejs";
 
@@ -48,18 +50,38 @@ export async function POST(req: Request) {
   const runDraft = async (channel: Channel) => {
     const agentName = DRAFT_AGENT_BY_CHANNEL[channel];
     const prompt_version = "v3";
-    const res = await runAgent(agentName, agentInput, {
+    const { result: res, debug } = await runAgentWithDebug(agentName, agentInput, {
       variant_key: "default",
       prompt_version,
       scope_key: shareId,
     });
     if (!res.ok) throw new Error(`agent_failed:${agentName}`);
-    return res.data as {
-      title_candidates: string[];
-      body_md: string;
-      body_html: string;
+    return {
+      data: res.data as {
+        title_candidates: string[];
+        body_md: string;
+        body_html: string;
+      },
+      debug,
     };
   };
+
+  const makeDebugFallback = (channel: Channel) =>
+    toMetaAgentDebug({
+      run_id: `fallback:${channel}`,
+      agent_name: DRAFT_AGENT_BY_CHANNEL[channel],
+      agent_version: "unknown",
+      variant_key: "default",
+      prompt_version: "v3",
+      scope_key: shareId,
+      llm_mode: "unknown",
+      cache_hit: false,
+      used_fallback: true,
+      repaired: false,
+      repair_attempts: 0,
+      latency_ms: 0,
+      error_kind: "FALLBACK_EMERGENCY",
+    });
 
   const emergencyFallbackDraft = async (channel: Channel) => {
     if (channel === "naver") {
@@ -92,11 +114,11 @@ export async function POST(req: Request) {
   const settled = await Promise.allSettled(
     CHANNELS.map(async (channel) => {
       try {
-        const data = await runDraft(channel);
-        return { channel, data };
+        const { data, debug } = await runDraft(channel);
+        return { channel, data, debug };
       } catch (e) {
         console.warn("[API_CONTENT] draft failed, using fallback", { channel, shareId, requestId, error: String(e) });
-        return { channel, data: await emergencyFallbackDraft(channel) };
+        return { channel, data: await emergencyFallbackDraft(channel), debug: makeDebugFallback(channel) };
       }
     })
   );
@@ -106,10 +128,24 @@ export async function POST(req: Request) {
     linkedin: await emergencyFallbackDraft("linkedin"),
     threads: await emergencyFallbackDraft("threads"),
   };
+  const metaBase = {
+    intake: parsed.data.intake,
+    topic_candidates: parsed.data.topic_candidates,
+    selected_candidate: parsed.data.selected_candidate,
+  };
+  const metaByChannel: PartialByChannel<any> = {
+    naver: { ...metaBase, agent_debug: makeDebugFallback("naver") },
+    linkedin: { ...metaBase, agent_debug: makeDebugFallback("linkedin") },
+    threads: { ...metaBase, agent_debug: makeDebugFallback("threads") },
+  };
 
   settled.forEach((r) => {
     if (r.status === "fulfilled") {
       draftsByChannel[r.value.channel] = r.value.data;
+      metaByChannel[r.value.channel] = {
+        ...metaBase,
+        agent_debug: toMetaAgentDebug(r.value.debug),
+      };
     }
   });
 
@@ -125,6 +161,7 @@ export async function POST(req: Request) {
       topic_candidates: parsed.data.topic_candidates,
       selected_candidate: parsed.data.selected_candidate,
       draftsByChannel,
+      metaByChannel,
     });
   } catch (e) {
     console.error("[API_CONTENT] createContentWithDrafts failed", { shareId, requestId, error: String(e) });

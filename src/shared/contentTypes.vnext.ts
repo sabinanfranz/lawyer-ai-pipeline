@@ -29,6 +29,20 @@ export type ComplianceReport = {
 export type ByChannel<T> = { [K in Channel]: T };
 export type PartialByChannel<T> = Partial<ByChannel<T>>;
 
+// Placeholders / helpers
+export const EMPTY_DRAFT: Draft = {
+  title_candidates: [],
+  body_md: "",
+  body_html: "",
+};
+
+export function getDraftOrPlaceholder(
+  drafts: PartialByChannel<Draft> | Record<Channel, Draft>,
+  ch: Channel
+): Draft {
+  return (drafts as any)?.[ch] ?? EMPTY_DRAFT;
+}
+
 // vNext ContentRecord shape (to be adopted in later phases)
 export type ContentRecordVNext = {
   shareId: string;
