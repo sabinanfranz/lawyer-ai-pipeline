@@ -1,4 +1,4 @@
-Last updated: 2026-01-20
+Last updated: 2026-01-27
 
 # 07_API_CONTRACTS
 
@@ -22,9 +22,13 @@ Last updated: 2026-01-20
 
 ### GET /api/content/{shareId}
 - 요청: path param shareId
-- 응답: ContentRecord (draft + optional revised/compliance_report)
+- 응답: ContentRecord (멀티채널 map)
+  - `drafts`: { naver, linkedin, threads }
+  - `revised?`: Partial map { channel → revised_md/html }
+  - `compliance_reports?`: Partial map { channel → risk_score/summary/issues }
+  - 레거시 데이터 보호를 위해 누락 채널은 placeholder draft로 채워 반환
 
 ### POST /api/content/{shareId}/approve (idempotent)
 - 요청: path param shareId
-- 처리: 이미 revised/report 있으면 재생성 금지. 없으면 ComplianceRewriteAgent 실행 → repo.setRevised
-- 응답: ContentRecord (revised+report 포함)
+- 처리: 채널별로 ComplianceRewriteAgent를 variant_key=channel로 호출(병렬). `(contentId, channel)`에 revised/report가 이미 있으면 해당 채널은 건너뜀(채널 단위 idempotent). 저장 후 revised 상태는 3채널 모두 존재할 때 revised로 전환.
+- 응답: ContentRecord 멀티채널 형태(revised/compliance_reports 맵)

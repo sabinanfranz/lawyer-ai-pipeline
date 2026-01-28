@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Loader } from "@/components/ui/Loader";
 import { ErrorBanner } from "@/components/ErrorBanner";
-import type { ContentRecord } from "@/server/repositories/contentRepo";
+import type { ContentRecord, ContentRecordMulti } from "@/server/repositories/contentRepo";
+import { CHANNEL_ORDER, CHANNEL_LABEL, type Channel } from "@/shared/channel";
 
 export default function ContentSharePage({ params }: { params: Promise<{ shareId: string }> }) {
   // Next 15+ client components receive params as a Promise; unwrap via React.use
   const { shareId } = React.use(params);
-  const [data, setData] = useState<ContentRecord | null>(null);
+  const [data, setData] = useState<ContentRecordMulti | null>(null);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export default function ContentSharePage({ params }: { params: Promise<{ shareId
         const msg = j?.error?.message ?? j?.error ?? "콘텐츠를 찾을 수 없습니다.";
         throw new Error(msg);
       }
-      const data = (j?.data ?? j) as ContentRecord;
+      const data = normalizeRecord(j?.data ?? j);
       setData(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
@@ -66,7 +67,7 @@ export default function ContentSharePage({ params }: { params: Promise<{ shareId
         const msg = j?.error?.message ?? j?.error ?? "승인 처리 실패";
         throw new Error(msg);
       }
-      const updated = (j?.data ?? j) as ContentRecord;
+      const updated = normalizeRecord(j?.data ?? j);
       setData(updated);
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
@@ -89,32 +90,15 @@ export default function ContentSharePage({ params }: { params: Promise<{ shareId
 
       {data && (
         <>
-          <Card>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="font-semibold">Draft (읽기 전용)</div>
-                <div className="text-xs text-gray-600">복사해서 네이버 블로그 편집기에 붙여넣으세요.</div>
-              </div>
-              <div className="flex gap-2">
-                <CopyButton text={data.draft.body_md} label="복사(MD)" />
-                <CopyButton text={data.draft.body_html} label="복사(HTML)" />
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <div className="text-sm font-semibold">제목 후보</div>
-              <ul className="list-disc ml-5 text-sm mt-1">
-                {data.draft.title_candidates.map((t, i) => (
-                  <li key={`${t}-${i}`}>{t}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="mt-4">
-              <div className="text-sm font-semibold">본문(Markdown 미리보기)</div>
-              <pre className="mt-2 whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm">{data.draft.body_md}</pre>
-            </div>
-          </Card>
+          {CHANNEL_ORDER.map((ch) => (
+            <DraftBlock
+              key={ch}
+              channel={ch}
+              draft={data.drafts[ch]}
+              revised={data.revised?.[ch]}
+              report={data.compliance_reports?.[ch]}
+            />
+          ))}
 
           <Card>
             <div className="font-semibold">승인(HITL)</div>
@@ -163,51 +147,140 @@ export default function ContentSharePage({ params }: { params: Promise<{ shareId
               </Button>
             </div>
           </Card>
-
-          {data.revised && data.compliance_report && (
-            <>
-              <Card>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-semibold">Revised (1회 수정본)</div>
-                    <div className="text-xs text-gray-600">승인 후 생성된 수정본입니다.</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <CopyButton text={data.revised.revised_md} label="복사(MD)" />
-                    <CopyButton text={data.revised.revised_html} label="복사(HTML)" />
-                  </div>
-                </div>
-                <pre className="mt-3 whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm">{data.revised.revised_md}</pre>
-              </Card>
-
-              <Card>
-                <div className="font-semibold">Compliance Report</div>
-                <div className="text-sm mt-2">
-                  Risk score: <span className="font-semibold">{data.compliance_report.risk_score}</span>
-                </div>
-                <div className="text-sm text-gray-700 mt-2">{data.compliance_report.summary}</div>
-
-                <div className="mt-3 space-y-2">
-                  {data.compliance_report.issues.map((it, idx) => (
-                    <div key={idx} className="rounded border p-3">
-                      <div className="text-sm font-semibold">{it.category}</div>
-                      <div className="text-sm mt-1">
-                        <span className="font-semibold">문장:</span> {it.snippet}
-                      </div>
-                      <div className="text-sm mt-1">
-                        <span className="font-semibold">이유:</span> {it.reason}
-                      </div>
-                      <div className="text-sm mt-1">
-                        <span className="font-semibold">대체:</span> {it.suggestion}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </>
-          )}
         </>
       )}
     </main>
+  );
+}
+
+const PLACEHOLDER_DRAFT = {
+  title_candidates: [] as string[],
+  body_md: "(초안이 아직 생성되지 않았습니다.)",
+  body_html: "<p>(초안이 아직 생성되지 않았습니다.)</p>",
+};
+
+function normalizeRecord(raw: any): ContentRecordMulti {
+  const isMulti = raw && typeof raw === "object" && "drafts" in raw;
+  if (!isMulti) {
+    const single = raw as ContentRecord;
+    const drafts: Partial<Record<Channel, any>> = single?.draft ? { naver: single.draft } : {};
+    const revised = single?.revised ? { naver: single.revised } : undefined;
+    const reports = single?.compliance_report ? { naver: single.compliance_report } : undefined;
+    raw = single
+      ? {
+          shareId: single.shareId,
+          status: single.status,
+          createdAt: single.createdAt,
+          updatedAt: single.updatedAt,
+          intake: single.intake,
+          topic_candidates: single.topic_candidates,
+          selected_candidate: single.selected_candidate,
+          drafts,
+          revised,
+          compliance_reports: reports,
+        }
+      : raw;
+  }
+
+  const drafts: Record<Channel, any> = {} as any;
+  CHANNEL_ORDER.forEach((ch) => {
+    drafts[ch] = raw?.drafts?.[ch] ?? PLACEHOLDER_DRAFT;
+  });
+
+  return {
+    ...raw,
+    drafts,
+    revised: raw?.revised,
+    compliance_reports: raw?.compliance_reports,
+  } as ContentRecordMulti;
+}
+
+function DraftBlock({
+  channel,
+  draft,
+  revised,
+  report,
+}: {
+  channel: Channel;
+  draft: { title_candidates: string[]; body_md: string; body_html: string };
+  revised?: { revised_md: string; revised_html: string };
+  report?: { risk_score: number; summary: string; issues: any[] };
+}) {
+  return (
+    <Card>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="font-semibold">{CHANNEL_LABEL[channel]} (읽기 전용)</div>
+          <div className="text-xs text-gray-600">복사해서 채널 편집기에 붙여넣으세요.</div>
+        </div>
+        <div className="flex gap-2">
+          <CopyButton text={draft.body_md} label="복사(MD)" />
+          <CopyButton text={draft.body_html} label="복사(HTML)" />
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="text-sm font-semibold">제목 후보</div>
+        <ul className="list-disc ml-5 text-sm mt-1">
+          {(draft.title_candidates ?? []).map((t, i) => (
+            <li key={`${t}-${i}`}>{t}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="mt-4">
+        <div className="text-sm font-semibold">본문(Markdown 미리보기)</div>
+        <pre className="mt-2 whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm">{draft.body_md}</pre>
+      </div>
+
+      {revised && (
+        <div className="mt-6 border-t pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-semibold">Revised (컴플라이언스 반영본)</div>
+              <div className="text-xs text-gray-600">승인 후 생성된 수정본입니다.</div>
+            </div>
+            <div className="flex gap-2">
+              <CopyButton text={revised.revised_md} label="복사(MD)" />
+              <CopyButton text={revised.revised_html} label="복사(HTML)" />
+            </div>
+          </div>
+          <pre className="mt-3 whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm">{revised.revised_md}</pre>
+        </div>
+      )}
+
+      {report && (
+        <div className="mt-6 border-t pt-4">
+          <div className="font-semibold">Compliance Report</div>
+          <div className="text-sm mt-2">
+            Risk score: <span className="font-semibold">{report.risk_score}</span>
+          </div>
+          <div className="text-sm text-gray-700 mt-2">{report.summary}</div>
+
+          <div className="mt-3 space-y-2">
+            {(report.issues ?? []).map((it, idx) => (
+              <div key={idx} className="rounded border p-3">
+                {it.category && <div className="text-sm font-semibold">{it.category}</div>}
+                {it.snippet && (
+                  <div className="text-sm mt-1">
+                    <span className="font-semibold">문장:</span> {it.snippet}
+                  </div>
+                )}
+                {it.reason && (
+                  <div className="text-sm mt-1">
+                    <span className="font-semibold">이유:</span> {it.reason}
+                  </div>
+                )}
+                {it.suggestion && (
+                  <div className="text-sm mt-1">
+                    <span className="font-semibold">대체:</span> {it.suggestion}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

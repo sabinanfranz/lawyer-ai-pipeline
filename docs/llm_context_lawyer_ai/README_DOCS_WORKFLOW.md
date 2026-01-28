@@ -1,4 +1,4 @@
-Last updated: 2026-01-20
+Last updated: 2026-01-27
 
 # README_DOCS_WORKFLOW
 
@@ -19,4 +19,5 @@ Last updated: 2026-01-20
 ## PR/커밋 전 확인
 - [ ] 관련 문서를 위 체크리스트에 따라 업데이트했는가?
 - [ ] 문서 상단 `Last updated` 날짜를 갱신했는가?
+- [ ] 채널 문자열을 새로 하드코딩하지 않고 `src/shared/channel.ts` SSOT를 사용했는가?
 - [ ] `npm test` 통과 여부 확인했는가?

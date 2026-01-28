@@ -1,4 +1,4 @@
-Last updated: 2026-01-20
+Last updated: 2026-01-27
 
 # 00_INDEX_llm
 
@@ -9,6 +9,7 @@ Last updated: 2026-01-20
 - LLM 실패/비활성/JSON 깨짐 시에도 fallback으로 **유효한 출력 스키마**를 반환해야 한다.
 - Agent cache key = `agent_name + agent_version + variant_key + prompt_version + scope_key + input_hash` (input_hash는 canonicalizeJson→sha256).
 - `/api/content/{shareId}/approve`는 **idempotent**; revised/report가 있으면 재생성 금지.
+- approve idempotent는 **채널 단위**로 적용: 이미 channel별 revised/report가 있으면 해당 채널은 재생성 금지.
 - “전문” 표현은 워크플로 전체에서 금지: ruleScan 탐지 → deterministic rewrite 치환 → LLM 결과에도 enforcement.
 
 ## 문서 업데이트 트리거

@@ -5,6 +5,7 @@ import { getContentRepo } from "@/server/repositories";
 import { generateShareId } from "@/lib/utils/shareId";
 import { runAgent } from "@/agent_core/orchestrator";
 import { fail, ok, newRequestId, readJson, zodDetails } from "@/server/errors";
+import { CHANNELS, type Channel } from "@/shared/channel";
 
 export const runtime = "nodejs";
 
@@ -38,34 +39,102 @@ export async function POST(req: Request) {
     normalized_brief: parsed.data.topic_candidates.normalized_brief,
   };
 
-  const result = await runAgent("draftNaver", agentInput, {
-    variant_key: "default",
-    prompt_version: "v2",
-    scope_key: shareId,
-  });
+  const DRAFT_AGENT_BY_CHANNEL: Record<Channel, any> = {
+    naver: "draftNaver",
+    linkedin: "draftLinkedin",
+    threads: "draftThreads",
+  };
 
-  if (!result.ok) {
-    return fail({
-      code: "AGENT_FAILED",
-      message: "초안 생성에 실패했습니다.",
-      status: 500,
-      requestId,
-      details: { agent: "draftNaver" },
+  const runDraft = async (channel: Channel) => {
+    const agentName = DRAFT_AGENT_BY_CHANNEL[channel];
+    const prompt_version = channel === "naver" ? "v3" : "v2";
+    const res = await runAgent(agentName, agentInput, {
+      variant_key: "default",
+      prompt_version,
+      scope_key: shareId,
     });
-  }
+    if (!res.ok) throw new Error(`agent_failed:${agentName}`);
+    return res.data as {
+      title_candidates: string[];
+      body_md: string;
+      body_html: string;
+    };
+  };
+
+  const emergencyFallbackDraft = async (channel: Channel) => {
+    if (channel === "naver") {
+      const { fallbackDraftNaver } = await import("@/agents/draftNaver");
+      const base = fallbackDraftNaver(agentInput);
+      return {
+        title_candidates: base.title_candidates,
+        body_md: base.body_md_lines.join("\n"),
+        body_html: base.body_md_lines.join("\n"),
+      };
+    }
+    if (channel === "linkedin") {
+      const { fallbackDraftLinkedin } = await import("@/agents/draftLinkedin");
+      const base = fallbackDraftLinkedin();
+      return {
+        title_candidates: base.title_candidates,
+        body_md: base.body_md_lines.join("\n"),
+        body_html: base.body_md_lines.join("\n"),
+      };
+    }
+    const { fallbackDraftThreads } = await import("@/agents/draftThreads");
+    const base = fallbackDraftThreads();
+    return {
+      title_candidates: base.title_candidates,
+      body_md: base.body_md_lines.join("\n"),
+      body_html: base.body_md_lines.join("\n"),
+    };
+  };
+
+  const settled = await Promise.allSettled(
+    CHANNELS.map(async (channel) => {
+      try {
+        const data = await runDraft(channel);
+        return { channel, data };
+      } catch (e) {
+        console.warn("[API_CONTENT] draft failed, using fallback", { channel, shareId, requestId, error: String(e) });
+        return { channel, data: await emergencyFallbackDraft(channel) };
+      }
+    })
+  );
+
+  const draftsByChannel: Record<Channel, { title_candidates: string[]; body_md: string; body_html: string }> = {
+    naver: await emergencyFallbackDraft("naver"),
+    linkedin: await emergencyFallbackDraft("linkedin"),
+    threads: await emergencyFallbackDraft("threads"),
+  };
+
+  settled.forEach((r) => {
+    if (r.status === "fulfilled") {
+      draftsByChannel[r.value.channel] = r.value.data;
+    }
+  });
 
   const now = new Date().toISOString();
 
-  await repo.create({
-    shareId,
-    status: "drafted",
-    createdAt: now,
-    updatedAt: now,
-    intake: parsed.data.intake,
-    topic_candidates: parsed.data.topic_candidates,
-    selected_candidate: parsed.data.selected_candidate,
-    draft: result.data as any,
-  });
+  try {
+    await repo.createContentWithDrafts({
+      shareId,
+      status: "drafted",
+      createdAt: now,
+      updatedAt: now,
+      intake: parsed.data.intake,
+      topic_candidates: parsed.data.topic_candidates,
+      selected_candidate: parsed.data.selected_candidate,
+      draftsByChannel,
+    });
+  } catch (e) {
+    console.error("[API_CONTENT] createContentWithDrafts failed", { shareId, requestId, error: String(e) });
+    return fail({
+      code: "DB_ERROR",
+      message: "초안 저장에 실패했습니다.",
+      status: 500,
+      requestId,
+    });
+  }
 
   return ok({ shareId }, 200);
 }

@@ -17,6 +17,12 @@ enum VersionType {
   revised
 }
 
+enum Channel {
+  naver
+  linkedin
+  threads
+}
+
 model Content {
   id        String        @id @default(cuid())
   shareId   String        @unique @map("share_id")
@@ -24,8 +30,8 @@ model Content {
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
 
-  versions         ContentVersion[]
-  complianceReport ComplianceReport?
+  versions          ContentVersion[]
+  complianceReports ComplianceReport[]
 
   @@map("contents")
 }
@@ -36,6 +42,7 @@ model ContentVersion {
   content   Content    @relation(fields: [contentId], references: [id], onDelete: Cascade)
 
   versionType     VersionType @map("version_type")
+  channel         Channel     @default(naver)
   titleCandidates Json?       @map("title_candidates")
   bodyMd          String      @map("body_md")
   bodyHtml        String      @map("body_html")
@@ -43,14 +50,16 @@ model ContentVersion {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@index([contentId, versionType])
+  @@unique([contentId, channel, versionType])
+  @@index([contentId, channel])
   @@map("content_versions")
 }
 
 model ComplianceReport {
   id        String  @id @default(cuid())
-  contentId String  @unique @map("content_id")
+  contentId String  @map("content_id")
   content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  channel   Channel @default(naver)
 
   riskScore Int   @map("risk_score")
   issues    Json? @map("issues")
@@ -58,5 +67,7 @@ model ComplianceReport {
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@unique([contentId, channel])
+  @@index([contentId, channel])
   @@map("compliance_reports")
 }
