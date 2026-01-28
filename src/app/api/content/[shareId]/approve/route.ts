@@ -53,9 +53,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
   const settled = await Promise.allSettled(
     channelsToRewrite.map(async (channel) => {
       const draftRaw = record.drafts[channel];
+      const safeDraftRaw = draftRaw ?? {
+        title_candidates: [],
+        body_md: "",
+        body_html: "",
+      };
       const draft = {
-        ...draftRaw,
-        title_candidates: (draftRaw.title_candidates ?? []).slice(0, 5),
+        ...safeDraftRaw,
+        title_candidates: (safeDraftRaw.title_candidates ?? []).slice(0, 5),
+        body_md: safeDraftRaw.body_md ?? "",
+        body_html: safeDraftRaw.body_html ?? "",
       };
       const result = await runAgent(
         "complianceRewrite",
