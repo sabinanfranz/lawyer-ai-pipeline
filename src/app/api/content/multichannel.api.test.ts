@@ -143,6 +143,16 @@ describe("API multichannel flows", () => {
     });
   });
 
+  it("uses prompt_version v3 for all draft agents", async () => {
+    await callPostContent();
+    const draftCalls = runAgentMock.mock.calls.filter((c) => c[0].startsWith("draft"));
+    expect(draftCalls).toHaveLength(3);
+    draftCalls.forEach((call) => {
+      const overrides = call[2];
+      expect(overrides?.prompt_version).toBe("v3");
+    });
+  });
+
   it("approve generates revised/report per channel and is idempotent", async () => {
     const shareId = await callPostContent();
     const beforeCalls = runAgentMock.mock.calls.length;

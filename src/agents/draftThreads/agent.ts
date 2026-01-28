@@ -55,15 +55,20 @@ function normalizeTitleCandidates(rawTitles: unknown, payload: any): string[] {
 }
 
 function passesThreadShape(lines: string[]): boolean {
-  if (!Array.isArray(lines) || lines.length < 5) return false;
-  const required = ["[1/5]", "[2/5]", "[3/5]", "[4/5]", "[5/5]"];
-  const found = new Set<number>();
-  lines.forEach((l) => {
-    required.forEach((tag, idx) => {
-      if (typeof l === "string" && l.trim().startsWith(tag)) found.add(idx);
+  if (!Array.isArray(lines) || lines.length < 3) return false;
+  const shapes = [
+    ["[1/3]", "[2/3]", "[3/3]"],
+    ["[1/5]", "[2/5]", "[3/5]", "[4/5]", "[5/5]"],
+  ];
+  return shapes.some((req) => {
+    const found = new Set<number>();
+    lines.forEach((l) => {
+      req.forEach((tag, idx) => {
+        if (typeof l === "string" && l.trim().startsWith(tag)) found.add(idx);
+      });
     });
+    return found.size === req.length;
   });
-  return found.size === required.length;
 }
 
 function buildFinal(llm: DraftThreadsLLMResponse) {
