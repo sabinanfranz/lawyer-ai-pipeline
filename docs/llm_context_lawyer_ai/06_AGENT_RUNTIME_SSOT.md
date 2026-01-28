@@ -28,6 +28,10 @@ Last updated: 2026-01-28
 - DraftLinkedin/DraftThreads/Naver draft 호출은 기본적으로 prompt_version=v3을 사용한다.
 - DraftThreadsAgent 출력 스키마: `title_candidates` 3~6개, `body_md_lines`는 정확히 3줄이며 각 줄이 `[1/3] …`, `[2/3] …`, `[3/3] …` 접두어로 시작해야 한다. 접두어/줄 수가 어긋나면 3줄 fallback으로 대체된다.
 
+## runAgent / debug 메타
+- `runAgentWithDebug`는 `runAgent`와 동일하게 agent를 실행하되, `AgentDebugMeta`(run_id, variant/prompt_version, llm_mode, cache_hit, used_fallback, repaired, repair_attempts, latency_ms, cache_key_prefix 등)를 함께 반환한다.
+- draft/revised를 DB에 저장할 때 `content_versions.meta.agent_debug`로 보존하지만, API 응답에서는 노출하지 않는다.
+
 ## 캐시
 - 전역 in-memory `CacheStore` (HMR에서도 유지 시도)
 - key = `agent:version:variant:prompt_version:scope:input_hash`

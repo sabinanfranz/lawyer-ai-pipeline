@@ -2,11 +2,12 @@ import type { AgentContext, AgentResult, AgentRuntime } from "./types";
 import { CacheStore } from "./cacheStore";
 import { PromptStore } from "./promptStore";
 import { createLlmClient } from "./llmClient";
-import { registry, type AgentName } from "./registry";
+import { getAgent } from "./registry";
 import { track } from "./telemetry";
 import { effectiveLlmMode } from "@/server/env";
 import { debugLog } from "./debug";
 import { toMetaAgentDebug, type AgentDebugMeta } from "@/shared/agentDebugMeta";
+import type { AgentName, AgentInputMap, AgentOutputMap } from "./agentMaps";
 
 type GlobalRt = AgentRuntime;
 
@@ -23,21 +24,21 @@ function getGlobalRuntime(): GlobalRt {
   return g.__agentRuntime;
 }
 
-export async function runAgent(
-  name: AgentName,
-  input: unknown,
+export async function runAgent<N extends AgentName>(
+  name: N,
+  input: AgentInputMap[N],
   overrides?: Partial<Pick<AgentContext, "variant_key" | "prompt_version" | "scope_key">>
-): Promise<AgentResult<unknown>> {
+): Promise<AgentResult<AgentOutputMap[N]>> {
   const { result } = await runAgentWithDebug(name, input, overrides);
   return result;
 }
 
-export async function runAgentWithDebug<T>(
-  name: AgentName,
-  input: unknown,
+export async function runAgentWithDebug<N extends AgentName>(
+  name: N,
+  input: AgentInputMap[N],
   overrides?: Partial<Pick<AgentContext, "variant_key" | "prompt_version" | "scope_key">>
-): Promise<{ result: AgentResult<T>; debug: AgentDebugMeta }> {
-  const agent = registry[name]();
+): Promise<{ result: AgentResult<AgentOutputMap[N]>; debug: AgentDebugMeta }> {
+  const agent = getAgent(name);
   const rt = getGlobalRuntime();
 
   const ctx: AgentContext = {
@@ -90,5 +91,5 @@ export async function runAgentWithDebug<T>(
     cache_key_prefix: (result.meta.cache_key as string | undefined)?.slice(0, 80),
   });
 
-  return { result, debug };
+  return { result: result as AgentResult<AgentOutputMap[N]>, debug };
 }
