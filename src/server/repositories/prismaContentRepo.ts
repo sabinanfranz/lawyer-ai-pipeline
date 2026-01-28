@@ -3,7 +3,6 @@ import type { Channel } from "@/shared/channel";
 import { CHANNELS } from "@/shared/channel";
 import {
   PRIMARY_CHANNEL,
-  type ComplianceReportPayload,
   type ContentRecord,
   type ContentRecordMulti,
   type ContentRepo,
@@ -11,9 +10,14 @@ import {
   type RevisedPayload,
   type CreateDraftsArgs,
 } from "./contentRepo";
-import type { ContentStatus } from "@prisma/client";
+import type { ContentStatus, ComplianceReport as DbComplianceReport } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { EMPTY_DRAFT, getDraftOrPlaceholder } from "@/shared/contentTypes.vnext";
+import { IntakeSchema } from "@/lib/schemas/intake";
+import { TopicCandidatesResponseSchema } from "@/agents/topicCandidates/schema";
+import { CreateContentSchema } from "@/lib/schemas/createContent";
+import type { ContentMetaPayload } from "@/shared/contentMetaTypes";
+import type { ComplianceReportPayload } from "@/shared/contentTypes.vnext";
 
 function ensureStringArray(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
@@ -64,15 +68,37 @@ export function normalizeComplianceIssues(raw: unknown): ComplianceReportPayload
   return issues;
 }
 
-export function normalizeComplianceReport(raw: {
-  riskScore?: unknown;
-  summary?: unknown;
-  issues?: unknown;
-}): ComplianceReportPayload {
-  const risk_score = typeof raw.riskScore === "number" ? raw.riskScore : 0;
-  const summary = typeof raw.summary === "string" ? raw.summary : "";
-  const issues = normalizeComplianceIssues(raw.issues);
+export function normalizeComplianceReport(raw: DbComplianceReport | { riskScore?: unknown; summary?: unknown; issues?: unknown }): ComplianceReportPayload {
+  const risk_score = typeof (raw as any).riskScore === "number" ? (raw as any).riskScore : 0;
+  const summary = typeof (raw as any).summary === "string" ? (raw as any).summary : "";
+  const issues = normalizeComplianceIssues((raw as any).issues);
   return { risk_score, summary, issues };
+}
+
+export function normalizeComplianceReportPayload(raw: unknown): ComplianceReportPayload {
+  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    risk_score: typeof obj.risk_score === "number" ? obj.risk_score : 0,
+    summary: typeof obj.summary === "string" ? obj.summary : "",
+    issues: normalizeComplianceIssues(obj.issues),
+  };
+}
+
+const SelectedCandidateSchema = CreateContentSchema.shape.selected_candidate;
+
+export function normalizeMeta(raw: unknown): ContentMetaPayload {
+  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+
+  const intakeParsed = IntakeSchema.safeParse(obj.intake);
+  const tcParsed = TopicCandidatesResponseSchema.safeParse(obj.topic_candidates);
+  const scParsed = SelectedCandidateSchema.safeParse(obj.selected_candidate);
+
+  return {
+    intake: intakeParsed.success ? intakeParsed.data : null,
+    topic_candidates: tcParsed.success ? tcParsed.data : null,
+    selected_candidate: scParsed.success ? scParsed.data : null,
+    agent_debug: obj.agent_debug,
+  };
 }
 
 function isUniqueError(e: unknown): e is Prisma.PrismaClientKnownRequestError {
@@ -170,8 +196,8 @@ export class PrismaContentRepo implements ContentRepo {
     });
     if (!content) return null;
 
-    const meta = pickMeta(content.versions);
-    if (!meta || !meta.intake || !meta.topic_candidates || !meta.selected_candidate) return null;
+    const metaRaw = pickMeta(content.versions);
+    const meta = normalizeMeta(metaRaw);
 
     const drafts: Partial<Record<Channel, DraftPayload>> = {};
     const revised: Partial<Record<Channel, RevisedPayload>> = {};
@@ -218,7 +244,7 @@ export class PrismaContentRepo implements ContentRepo {
   async setRevisedByChannel(
     shareId: string,
     channel: Channel,
-    patch: { revised_md: string; revised_html: string; report: ContentRecord["compliance_report"] }
+    patch: { revised_md: string; revised_html: string; report: ContentRecord["compliance_report"]; meta?: any }
   ): Promise<ContentRecordMulti | null> {
     const content = await prisma.content.findUnique({
       where: { shareId },
@@ -238,7 +264,7 @@ export class PrismaContentRepo implements ContentRepo {
             contentId: content.id,
             channel,
             versionType: "revised",
-            titleCandidates: null,
+            titleCandidates: [],
             bodyMd: patch.revised_md,
             bodyHtml: patch.revised_html,
             meta: patch.meta ?? null,

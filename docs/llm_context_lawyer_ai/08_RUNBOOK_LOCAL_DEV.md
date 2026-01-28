@@ -19,7 +19,7 @@ npm run dev
 ## Database (선택, 권장)
 ```bash
 docker compose up -d
-npx prisma migrate dev
+npm run prisma:generate
 npm run dev
 ```
 - DATABASE_URL 설정 시 PrismaContentRepo 사용, 없으면 InMemoryContentRepo 사용

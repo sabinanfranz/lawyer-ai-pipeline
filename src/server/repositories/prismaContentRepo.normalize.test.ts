@@ -32,6 +32,7 @@ describe("normalizeComplianceIssues", () => {
   it("returns empty array for non-array or non-object entries", () => {
     expect(normalizeComplianceIssues(null)).toEqual([]);
     expect(normalizeComplianceIssues("text")).toEqual([]);
+    expect(normalizeComplianceIssues({})).toEqual([]);
     expect(normalizeComplianceIssues([1, 2, 3])).toEqual([]);
   });
 });

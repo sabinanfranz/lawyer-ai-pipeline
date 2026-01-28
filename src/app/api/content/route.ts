@@ -1,6 +1,3 @@
-import { z } from "zod";
-import { IntakeSchema } from "@/lib/schemas/intake";
-import { TopicCandidatesResponseSchema, TopicCandidateSchema } from "@/agents/topicCandidates/schema";
 import { getContentRepo } from "@/server/repositories";
 import { generateShareId } from "@/lib/utils/shareId";
 import { runAgentWithDebug } from "@/agent_core/orchestrator";
@@ -8,14 +5,10 @@ import { fail, ok, newRequestId, readJson, zodDetails } from "@/server/errors";
 import { CHANNELS, type Channel } from "@/shared/channel";
 import { toMetaAgentDebug } from "@/shared/agentDebugMeta";
 import type { PartialByChannel } from "@/shared/contentTypes.vnext";
+import { CreateContentSchema } from "@/lib/schemas/createContent";
+import type { CreateContentResponse } from "@/shared/apiContracts";
 
 export const runtime = "nodejs";
-
-const CreateContentSchema = z.object({
-  intake: IntakeSchema,
-  topic_candidates: TopicCandidatesResponseSchema,
-  selected_candidate: TopicCandidateSchema,
-});
 
 export async function POST(req: Request) {
   const requestId = newRequestId();
@@ -173,5 +166,6 @@ export async function POST(req: Request) {
     });
   }
 
-  return ok({ shareId }, 200);
+  const out: CreateContentResponse = { shareId };
+  return ok(out, 200);
 }

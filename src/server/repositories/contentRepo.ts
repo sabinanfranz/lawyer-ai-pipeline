@@ -1,7 +1,6 @@
 import type { IntakeInput } from "@/lib/schemas/intake";
 import type { TopicCandidatesResponse, TopicCandidate } from "@/agents/topicCandidates";
 import type { DraftNaverOutput } from "@/agents/draftNaver";
-import type { ComplianceRewriteOutput } from "@/agents/complianceRewrite";
 import type { Channel } from "@/shared/channel";
 import { CHANNEL_ORDER } from "@/shared/channel";
 import type {
@@ -9,7 +8,7 @@ import type {
   PartialByChannel,
   Draft as DraftVNext,
   Revised as RevisedVNext,
-  ComplianceReport as ComplianceReportVNext,
+  ComplianceReportPayload,
 } from "@/shared/contentTypes.vnext";
 
 export type ContentStatus = "drafted" | "revised";
@@ -20,9 +19,9 @@ export type ContentRecord = {
   createdAt: string;
   updatedAt: string;
 
-  intake: IntakeInput;
-  topic_candidates: TopicCandidatesResponse;
-  selected_candidate: TopicCandidate;
+  intake: IntakeInput | null;
+  topic_candidates: TopicCandidatesResponse | null;
+  selected_candidate: TopicCandidate | null;
 
   draft: DraftNaverOutput;
 
@@ -31,27 +30,27 @@ export type ContentRecord = {
     revised_html: string;
   };
 
-  compliance_report?: ComplianceRewriteOutput["report"];
+  compliance_report?: ComplianceReportPayload;
 };
 
 export type ContentMeta = {
-  intake: IntakeInput;
-  topic_candidates: TopicCandidatesResponse;
-  selected_candidate: TopicCandidate;
+  intake: IntakeInput | null;
+  topic_candidates: TopicCandidatesResponse | null;
+  selected_candidate: TopicCandidate | null;
 };
 
 export type DraftPayload = DraftNaverOutput | DraftVNext;
 export type RevisedPayload = { revised_md: string; revised_html: string } | RevisedVNext;
-export type ComplianceReportPayload = ComplianceRewriteOutput["report"] | ComplianceReportVNext;
+export type { ComplianceReportPayload };
 
 export type ContentRecordMulti = {
   shareId: string;
   status: ContentStatus;
   createdAt: string;
   updatedAt: string;
-  intake: IntakeInput;
-  topic_candidates: TopicCandidatesResponse;
-  selected_candidate: TopicCandidate;
+  intake: IntakeInput | null;
+  topic_candidates: TopicCandidatesResponse | null;
+  selected_candidate: TopicCandidate | null;
   drafts: PartialByChannel<DraftPayload>;
   revised?: PartialByChannel<RevisedPayload>;
   compliance_reports?: PartialByChannel<ComplianceReportPayload>;
@@ -62,9 +61,9 @@ export type CreateDraftsArgs = {
   status: ContentStatus;
   createdAt?: string;
   updatedAt?: string;
-  intake: IntakeInput;
-  topic_candidates: TopicCandidatesResponse;
-  selected_candidate: TopicCandidate;
+  intake: IntakeInput | null;
+  topic_candidates: TopicCandidatesResponse | null;
+  selected_candidate: TopicCandidate | null;
   draftsByChannel: PartialByChannel<DraftPayload>;
   metaByChannel?: PartialByChannel<any>;
 };

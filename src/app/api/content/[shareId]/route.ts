@@ -2,6 +2,7 @@ import { getContentRepo } from "@/server/repositories";
 import { fail, ok, newRequestId } from "@/server/errors";
 import { CHANNELS, type Channel } from "@/shared/channel";
 import type { ContentRecord, ContentRecordMulti } from "@/server/repositories/contentRepo";
+import type { GetContentResponse } from "@/shared/apiContracts";
 
 export const runtime = "nodejs";
 
@@ -28,7 +29,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ shareId
 
   const normalized = ensureDrafts(record);
 
-  return ok(normalized, 200);
+  const out: GetContentResponse = normalized;
+  return ok(out, 200);
 }
 
 const PLACEHOLDER_DRAFT = {

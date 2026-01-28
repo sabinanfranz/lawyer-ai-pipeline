@@ -14,18 +14,22 @@ export type Revised = {
 };
 
 // API payload shape for compliance issues (SSOT)
-export type ComplianceIssue = {
+export type ComplianceIssuePayload = {
   category: string;
   snippet: string;
   reason: string;
   suggestion: string;
 };
 
-export type ComplianceReport = {
+export type ComplianceReportPayload = {
   risk_score: number;
   summary: string;
-  issues: ComplianceIssue[];
+  issues: ComplianceIssuePayload[];
 };
+
+// Backward-friendly aliases (avoid downstream churn)
+export type ComplianceIssue = ComplianceIssuePayload;
+export type ComplianceReport = ComplianceReportPayload;
 
 // Channel-indexed helpers to keep storage/rendering aligned
 export type ByChannel<T> = { [K in Channel]: T };

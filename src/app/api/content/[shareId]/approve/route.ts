@@ -4,6 +4,9 @@ import { fail, ok, newRequestId } from "@/server/errors";
 import { CHANNELS, type Channel } from "@/shared/channel";
 import type { ContentRecordMulti } from "@/server/repositories/contentRepo";
 import { toMetaAgentDebug } from "@/shared/agentDebugMeta";
+import { ComplianceRewriteOutputSchema } from "@/agents/complianceRewrite/schema";
+import { normalizeComplianceReportPayload } from "@/server/repositories/prismaContentRepo";
+import type { ApproveContentResponse } from "@/shared/apiContracts";
 
 export const runtime = "nodejs";
 
@@ -77,7 +80,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
         { variant_key: channel, prompt_version: "v2", scope_key: record.shareId }
       );
       if (!result.ok) throw new Error("AGENT_FAILED:" + channel);
-      return { channel, data: result.data as any, debug };
+      const parsed = ComplianceRewriteOutputSchema.safeParse(result.data);
+      if (!parsed.success) {
+        console.error("[API_APPROVE] agent output invalid", parsed.error.flatten());
+        throw new Error("AGENT_FAILED:" + channel);
+      }
+      return { channel, data: parsed.data, debug };
     })
   );
 
@@ -89,11 +97,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
       continue;
     }
     const { channel, data, debug } = s.value;
+    const normalizedReport = normalizeComplianceReportPayload(data.report);
     try {
       await repo.setRevisedByChannel(record.shareId, channel as Channel, {
         revised_md: data.revised_md,
         revised_html: data.revised_html,
-        report: data.report,
+        report: normalizedReport,
         meta: { ...metaBase, agent_debug: toMetaAgentDebug(debug) },
       });
     } catch (e) {
@@ -126,5 +135,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
     });
   }
 
-  return ok(updated, 200);
+  const out: ApproveContentResponse = updated;
+  return ok(out, 200);
 }

@@ -21,7 +21,7 @@ npm run dev
 ## 4) Database (optional but recommended)
 ```bash
 docker compose up -d
-npx prisma migrate dev
+npm run prisma:generate
 npm run dev
 ```
 
