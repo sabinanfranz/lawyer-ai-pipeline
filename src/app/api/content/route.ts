@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
   const runDraft = async (channel: Channel) => {
     const agentName = DRAFT_AGENT_BY_CHANNEL[channel];
-    const prompt_version = channel === "naver" ? "v3" : "v2";
+    const prompt_version = "v3";
     const res = await runAgent(agentName, agentInput, {
       variant_key: "default",
       prompt_version,
