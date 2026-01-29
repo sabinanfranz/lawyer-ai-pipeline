@@ -1,4 +1,4 @@
-Last updated: 2026-01-28
+Last updated: 2026-01-28 (sync)
 
 # 07_API_CONTRACTS
 
@@ -14,6 +14,7 @@ Last updated: 2026-01-28
 ### POST /api/topic-candidates
 - 요청: IntakeSchema (industry, target_role, issue_stage, pain_picker[1-2], content_goal, offer_material, pain_sentence?, experience_seed?, must_avoid?)
 - 응답: TopicCandidatesResponse (normalized_brief, candidates[7], top3_recommendations[3])
+- 가드레일: agent output을 TopicCandidatesResponseSchema.safeParse로 검증; 실패 시 502 + `{ error: "AGENT_FAILED" }` (DB write 없음)
 
 ### POST /api/content
 - 요청: { intake: IntakeSchema, topic_candidates: TopicCandidatesResponse, selected_candidate: TopicCandidate }
@@ -30,5 +31,5 @@ Last updated: 2026-01-28
 
 ### POST /api/content/{shareId}/approve (idempotent)
 - 요청: path param shareId
-- 처리: 채널별로 ComplianceRewriteAgent를 variant_key=channel로 호출(병렬). `(contentId, channel)`에 revised/report가 이미 있으면 해당 채널은 건너뜀(채널 단위 idempotent). 저장 후 revised 상태는 3채널 모두 존재할 때 revised로 전환.
+- 처리: 채널별로 ComplianceRewriteAgent를 variant_key=channel로 호출(병렬). `(contentId, channel)`에 revised/report가 이미 있으면 해당 채널은 건너뜀(채널 단위 idempotent). 저장 전 agent 결과를 ComplianceRewriteOutputSchema.safeParse로 검증하며 실패 시 502 + `{ error: "AGENT_FAILED" }`로 중단(DB write 없음). 저장 시 compliance report는 `normalizeComplianceReportPayload`를 거쳐 issues를 `{category,snippet,reason,suggestion}` 4필드 표준으로 강제. 저장 후 revised 상태는 3채널 모두 존재할 때 revised로 전환.
 - 응답: ContentRecord 멀티채널 형태(revised/compliance_reports 맵)
