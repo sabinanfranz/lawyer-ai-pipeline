@@ -1,4 +1,4 @@
-Last updated: 2026-01-28
+Last updated: 2026-01-29
 
 # 08_RUNBOOK_LOCAL_DEV
 
@@ -23,6 +23,10 @@ npm run prisma:generate
 npm run dev
 ```
 - DATABASE_URL 설정 시 PrismaContentRepo 사용, 없으면 InMemoryContentRepo 사용
+
+## 설치/빌드 유의사항 (CI/Railway)
+- `postinstall`에서 `npm run prisma:generate`를 실행하며, 스키마 경로는 `--schema prisma/schema.prisma`로 고정됨.
+- `prisma`와 `@prisma/client`는 dependencies에 있어 prod install(`npm ci --omit=dev`)에서도 Prisma CLI가 존재하도록 유지해야 함.
 
 ## 배포/스타트 스크립트 (Railway 포함)
 - `npm run postinstall` → `prisma generate` (패키지 설치 시 자동 실행)
