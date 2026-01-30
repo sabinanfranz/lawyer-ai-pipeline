@@ -111,7 +111,7 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInputV1, C
     });
     const system = prompts.system;
 
-    let commonRepair: string | undefined;
+    let commonRepair: string | null = null;
     commonRepair = await rt.prompts.loadCommonRepair();
 
     if (process.env.DEBUG_AGENT === "1") {
