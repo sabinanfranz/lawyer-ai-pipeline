@@ -3,14 +3,15 @@ import { canonicalizeJson, sha256 } from "@/agent_core";
 import { jsonGuard } from "@/agent_core/jsonGuard";
 import { renderTemplate } from "@/agent_core/promptStore";
 import { debugLog, isDebugEnabled } from "@/agent_core/debug";
-import { mdToHtml } from "@/lib/utils/mdToHtml";
 import {
   DraftLinkedinLLMResponseSchema,
-  DraftLinkedinResponseSchema,
   type DraftLinkedinLLMResponse,
-  type DraftLinkedinResponse,
 } from "./schema";
 import { fallbackDraftLinkedin } from "./fallback";
+import { DRAFT_LOOSE_MODE } from "@/shared/featureFlags.server";
+import { coerceDraftRaw } from "@/shared/coerceDraftRaw";
+import { runAgentTextWithDebug } from "@/agent_core/textRunner";
+import type { DraftRawV1 } from "@/shared/contentTypes.vnext";
 
 const PROMPT_AGENT_KEY = "draft_linkedin";
 
@@ -56,22 +57,21 @@ function normalizeTitleCandidates(rawTitles: unknown, payload: any): string[] {
 
 function buildFinal(llm: DraftLinkedinLLMResponse) {
   const body_md = llm.body_md_lines.join("\n");
-  const body_html = mdToHtml(body_md);
-  const data = DraftLinkedinResponseSchema.parse({
+  const data: DraftRawV1 = {
+    draft_md: body_md,
     title_candidates: llm.title_candidates ?? [],
-    body_md,
-    body_html,
-  });
+    raw_json: llm,
+  };
   return { data };
 }
 
-const FALLBACK_SIGNATURE = JSON.stringify(buildFinal(fallbackDraftLinkedin()).data);
+const FALLBACK_SIGNATURE = JSON.stringify(fallbackDraftLinkedin());
 
-export class DraftLinkedinAgent implements Agent<any, DraftLinkedinResponse> {
+export class DraftLinkedinAgent implements Agent<any, DraftRawV1> {
   name = "draftLinkedin";
   version = "v1";
 
-  async run(input: any, ctx: AgentContext, rt: AgentRuntime): Promise<AgentResult<DraftLinkedinResponse>> {
+  async run(input: any, ctx: AgentContext, rt: AgentRuntime): Promise<AgentResult<DraftRawV1>> {
     const inputForHash = {
       intake: input?.intake,
       selected_candidate: input?.selected_candidate,
@@ -81,19 +81,58 @@ export class DraftLinkedinAgent implements Agent<any, DraftLinkedinResponse> {
     const inputHash = sha256(canonical);
     const cacheKey = `${this.name}:${this.version}:${ctx.variant_key}:${ctx.prompt_version}:${ctx.scope_key}:${inputHash}`;
 
+    if (DRAFT_LOOSE_MODE) {
+      const { text, agent_debug, cache_key, input_hash, prompt_path } = await runAgentTextWithDebug({
+        agent_name: this.name,
+        agent_version: this.version,
+        variant_key: ctx.variant_key,
+        prompt_version: ctx.prompt_version,
+        scope_key: ctx.scope_key,
+        prompt_agent_key: PROMPT_AGENT_KEY,
+        input: inputForHash,
+        renderUser: ({ payload_json, prompts }) => renderTemplate(prompts.user, { payload_json }),
+        max_tokens_override: 8000,
+      });
+
+      const fallback = fallbackDraftLinkedin();
+      const coerced = coerceDraftRaw(text, { fallbackDraftMd: fallback.draft_md });
+
+      const titles = normalizeTitleCandidates(coerced.draft.title_candidates ?? [], input);
+      const body_md_lines = [coerced.draft.draft_md];
+      const { data } = buildFinal({ title_candidates: titles, body_md_lines });
+
+      const used_fallback =
+        agent_debug.used_fallback || coerced.parse_mode === "empty" || !text.trim();
+
+      if (!(used_fallback && ctx.llm_mode === "openai")) {
+        rt.cache.set(cache_key, data);
+      }
+
+      return {
+        ok: true,
+        data,
+        meta: {
+          used_fallback,
+          cache_hit: agent_debug.cache_hit,
+          cache_key,
+          input_hash,
+          prompt_path,
+          parse_mode: coerced.parse_mode,
+          output_chars: coerced.output_chars,
+        },
+      };
+    }
+
     const cached = rt.cache.get<unknown>(cacheKey);
     if (cached) {
-      const parsed = DraftLinkedinResponseSchema.safeParse(cached);
-      if (parsed.success) {
-        const cachedFallback = isFallbackResponse(parsed.data);
-        debugLog("DraftLinkedinAgent", `cache_hit=true fallback=${cachedFallback}`);
-        return {
-          ok: true,
-          data: parsed.data,
-          meta: { used_fallback: cachedFallback, cache_hit: true, cache_key: cacheKey, input_hash: inputHash },
-        };
-      }
-      console.warn("[DraftLinkedinAgent] cache value invalid → ignore", { cacheKey, run_id: ctx.run_id });
+      const cachedDraft = cached as DraftRawV1;
+      const cachedFallback = isFallbackResponse(cachedDraft);
+      debugLog("DraftLinkedinAgent", `cache_hit=true fallback=${cachedFallback}`);
+      return {
+        ok: true,
+        data: cachedDraft,
+        meta: { used_fallback: cachedFallback, cache_hit: true, cache_key: cacheKey, input_hash: inputHash },
+      };
     }
 
     const prompts = await rt.prompts.load({
@@ -115,7 +154,7 @@ export class DraftLinkedinAgent implements Agent<any, DraftLinkedinResponse> {
     }
 
     if (ctx.llm_mode !== "openai") {
-      const { data } = buildFinal(fallbackDraftLinkedin());
+      const data = fallbackDraftLinkedin();
       rt.cache.set(cacheKey, data);
       return {
         ok: true,
@@ -143,7 +182,7 @@ export class DraftLinkedinAgent implements Agent<any, DraftLinkedinResponse> {
         // eslint-disable-next-line no-console
         console.error("[DraftLinkedinAgent] LLM failed", e);
       }
-      const { data } = buildFinal(fallbackDraftLinkedin());
+      const data = fallbackDraftLinkedin();
       debugLog("DraftLinkedinAgent", "skip cache set reason=LLM_ERROR(openai)", { cacheKey, run_id: ctx.run_id });
       return {
         ok: true,
@@ -158,6 +197,7 @@ export class DraftLinkedinAgent implements Agent<any, DraftLinkedinResponse> {
       };
     }
 
+    const baseFallback = fallbackDraftLinkedin();
     const guarded = await jsonGuard<DraftLinkedinLLMResponse>({
       raw,
       schema: DraftLinkedinLLMResponseSchema,
@@ -177,7 +217,10 @@ export class DraftLinkedinAgent implements Agent<any, DraftLinkedinResponse> {
           max_tokens_override: 8000,
         });
       },
-      fallback: () => fallbackDraftLinkedin(),
+      fallback: () => ({
+        title_candidates: baseFallback.title_candidates ?? [],
+        body_md_lines: baseFallback.draft_md.split("\n"),
+      }),
       maxRepairAttempts: 2,
     });
 
@@ -187,7 +230,7 @@ export class DraftLinkedinAgent implements Agent<any, DraftLinkedinResponse> {
       title_candidates: normalizedTitles,
     };
 
-    const { data } = buildFinal(guardedData);
+      const { data } = buildFinal(guardedData);
     if (guarded.used_fallback) {
       debugLog("DraftLinkedinAgent", "fallback reason=JSON_GUARD_FALLBACK");
     }
@@ -229,6 +272,6 @@ export class DraftLinkedinAgent implements Agent<any, DraftLinkedinResponse> {
   }
 }
 
-function isFallbackResponse(data: DraftLinkedinResponse): boolean {
+function isFallbackResponse(data: DraftRawV1): boolean {
   return JSON.stringify(data) === FALLBACK_SIGNATURE;
 }

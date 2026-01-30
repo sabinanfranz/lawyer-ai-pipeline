@@ -1,4 +1,4 @@
-Last updated: 2026-01-28 (sync)
+Last updated: 2026-01-30 (sync)
 
 # 07_API_CONTRACTS
 
@@ -28,6 +28,11 @@ Last updated: 2026-01-28 (sync)
   - `revised?`: Partial map { channel → revised_md/html }
   - `compliance_reports?`: Partial map { channel → risk_score/summary/issues }
   - 레거시 데이터 보호를 위해 누락 채널은 placeholder draft로 채워 반환
+
+#### (Plan) Draft loose mode (`DRAFT_LOOSE_MODE`)
+- PR-1+에서 draft 에이전트 출력 규약을 완화하고, UI는 `draft_md`를 그대로 렌더링하는 모드를 추가할 예정.
+- 이 모드에서는 draft 구조가 `{ draft_md, title_candidates?, raw_json? }` 중심으로 정리된다.
+- PR-0에서는 문서/타입/플래그만 추가되며, API 응답 shape는 변경되지 않는다.
 
 ### POST /api/content/{shareId}/approve (idempotent)
 - 요청: path param shareId

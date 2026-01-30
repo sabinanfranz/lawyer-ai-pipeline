@@ -34,8 +34,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ shareId
 }
 
 const PLACEHOLDER_DRAFT = {
+  draft_md: "(초안이 아직 생성되지 않았습니다.)",
   title_candidates: [] as string[],
   body_md: "(초안이 아직 생성되지 않았습니다.)",
+  body_md_lines: ["(초안이 아직 생성되지 않았습니다.)"],
   body_html: "<p>(초안이 아직 생성되지 않았습니다.)</p>",
 };
 
@@ -44,13 +46,25 @@ function ensureDrafts(record: ContentRecordMulti | ContentRecord) {
   const drafts: Record<Channel, typeof PLACEHOLDER_DRAFT | any> = {} as any;
   CHANNELS.forEach((ch) => {
     if (base.drafts && (base.drafts as any)[ch]) {
-      drafts[ch] = (base.drafts as any)[ch];
+      drafts[ch] = syncLegacyDraftFields((base.drafts as any)[ch]);
     }
   });
   for (const ch of CHANNELS) {
     if (!drafts[ch]) drafts[ch] = PLACEHOLDER_DRAFT;
   }
   return { ...base, drafts };
+}
+
+function syncLegacyDraftFields(draft: any) {
+  const draft_md = draft?.draft_md ?? draft?.body_md ?? PLACEHOLDER_DRAFT.draft_md;
+  return {
+    draft_md,
+    title_candidates: draft?.title_candidates ?? [],
+    body_md: draft_md,
+    body_md_lines: draft?.body_md_lines ?? [draft_md],
+    body_html: draft?.body_html ?? PLACEHOLDER_DRAFT.body_html,
+    raw_json: draft?.raw_json,
+  };
 }
 
 function normalizeLegacy(rec: ContentRecordMulti | ContentRecord): ContentRecordMulti {

@@ -3,19 +3,17 @@ import { canonicalizeJson, sha256 } from "@/agent_core";
 import { jsonGuard } from "@/agent_core/jsonGuard";
 import { renderTemplate } from "@/agent_core/promptStore";
 
-import { DraftNaverOutputSchema } from "@/agents/draftNaver/schema";
-import type { DraftNaverOutput } from "@/agents/draftNaver/schema";
-
 import {
   ComplianceRewriteLlmSchema,
   ComplianceRewriteOutputSchema,
   type ComplianceRewriteLlmOutput,
   type ComplianceRewriteOutput,
+  ComplianceRewriteInputV1Schema,
+  type ComplianceRewriteInputV1,
 } from "./schema";
 import { fallbackComplianceRewrite } from "./fallback";
 import { applyDeterministicRewrite, ensureDisclaimerHtml, ensureDisclaimerMd, scanCompliance } from "./ruleScan";
 import { DEFAULT_DISCLAIMER } from "@/lib/constants/safetyText";
-import { z } from "zod";
 import {
   fixBrokenSpacing,
   normalizeCtaSection,
@@ -23,22 +21,16 @@ import {
   qualityCheck,
   regenerateHtml,
 } from "./qualityGate";
+import { mdToHtml } from "@/lib/utils/mdToHtml";
 
 const PROMPT_AGENT_KEY = "compliance_rewrite";
 
-const ComplianceRewriteInputSchema = z.object({
-  draft: DraftNaverOutputSchema,
-  must_avoid: z.string().optional().default(""),
-});
-
-export type ComplianceRewriteInput = z.infer<typeof ComplianceRewriteInputSchema>;
-
-export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, ComplianceRewriteOutput> {
+export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInputV1, ComplianceRewriteOutput> {
   name = "complianceRewrite";
   version = "v1";
 
-  async run(inputRaw: ComplianceRewriteInput, ctx: AgentContext, rt: AgentRuntime): Promise<AgentResult<ComplianceRewriteOutput>> {
-    const parsed = ComplianceRewriteInputSchema.safeParse(inputRaw);
+  async run(inputRaw: ComplianceRewriteInputV1, ctx: AgentContext, rt: AgentRuntime): Promise<AgentResult<ComplianceRewriteOutput>> {
+    const parsed = ComplianceRewriteInputV1Schema.safeParse(inputRaw);
     if (!parsed.success) {
       const fb = fallbackComplianceRewrite({
         draft_md: "",
@@ -49,12 +41,12 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
     }
 
     const input = parsed.data;
-    const draft: DraftNaverOutput = input.draft;
 
     const canonical = canonicalizeJson({
-      draft_md: draft.body_md,
-      draft_html: draft.body_html,
+      draft_md: input.body_md,
+      draft_html: mdToHtml(input.body_md),
       must_avoid: input.must_avoid ?? "",
+      channel: input.channel,
       variant: ctx.variant_key,
       prompt_version: ctx.prompt_version,
     });
@@ -76,7 +68,7 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
     }
 
     // 1) Facts Builder (SSOT)
-    const scan = scanCompliance({ text: draft.body_md, mustAvoidRaw: input.must_avoid });
+    const scan = scanCompliance({ text: input.body_md, mustAvoidRaw: input.must_avoid });
     const report = {
       risk_score: scan.risk_score,
       issues: scan.issues,
@@ -88,8 +80,8 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
 
     // 2) fallback baseline(항상 가능)
     const fallbackOut = fallbackComplianceRewrite({
-      draft_md: draft.body_md,
-      draft_html: draft.body_html,
+      draft_md: input.body_md,
+      draft_html: mdToHtml(input.body_md),
       must_avoid: input.must_avoid,
     });
 
@@ -114,8 +106,8 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
       must_avoid: (input.must_avoid ?? "").trim(),
       issues_json: JSON.stringify(report.issues),
       disclaimer_text: DEFAULT_DISCLAIMER,
-      draft_md: draft.body_md,
-      draft_html: draft.body_html,
+      body_md: input.body_md,
+      channel: input.channel,
     });
     const system = prompts.system;
 
@@ -125,7 +117,7 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
         run_id: ctx.run_id,
         system_len: system?.length ?? 0,
         user_len: user?.length ?? 0,
-        repair_system_len: prompts.repair?.length ?? 0,
+        repair_system_len: commonRepair?.length ?? 0,
       });
     }
 
@@ -160,31 +152,27 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInput, Com
       };
     }
 
+    const commonRepair = await rt.prompts.loadCommonRepair();
+
     const guarded = await jsonGuard<ComplianceRewriteLlmOutput>({
       raw,
       schema: ComplianceRewriteLlmSchema,
       repair: async ({ raw: badRaw }) => {
-        const repairUser =
-          `아래 출력은 JSON 스키마를 만족하지 않습니다. 반드시 유효한 JSON만 반환하세요.\n\n` +
-          `--- BROKEN OUTPUT ---\n${badRaw}\n\n` +
-          `--- REQUIRED SCHEMA ---\n{ "revised_md": "...", "revised_html": "..." }\n`;
-        if (process.env.DEBUG_AGENT === "1") {
-          // eslint-disable-next-line no-console
-          console.log("[ComplianceRewriteAgent] repair_prompt_sizes", {
-            run_id: ctx.run_id,
-            system_len: prompts.repair?.length ?? 0,
-            user_len: repairUser.length,
-          });
-        }
+        if (!commonRepair?.trim()) return "";
+        const repairUser = renderTemplate(commonRepair, {
+          RAW_OUTPUT: badRaw,
+          SCHEMA: 'ComplianceRewrite output schema { "revised_md": string, "revised_html": string }',
+          ERRORS: "JSON_PARSE_OR_SCHEMA_VALIDATE_FAILED",
+        });
         return await rt.llm.generateText({
-          system: prompts.repair,
+          system: "",
           user: repairUser,
           run_id: ctx.run_id,
           max_tokens_override: 6000,
         });
       },
       fallback: () => ({ revised_md: fallbackOut.revised_md, revised_html: fallbackOut.revised_html }),
-      maxRepairAttempts: 2,
+      maxRepairAttempts: commonRepair?.trim() ? 1 : 0,
     });
 
     // 4) Deterministic enforcement(재유입 차단) + quality gate

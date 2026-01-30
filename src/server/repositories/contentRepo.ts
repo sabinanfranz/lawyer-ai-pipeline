@@ -1,6 +1,5 @@
 import type { IntakeInput } from "@/lib/schemas/intake";
 import type { TopicCandidatesResponse, TopicCandidate } from "@/agents/topicCandidates";
-import type { DraftNaverOutput } from "@/agents/draftNaver";
 import type { Channel } from "@/shared/channel";
 import { CHANNEL_ORDER } from "@/shared/channel";
 import type {
@@ -10,6 +9,7 @@ import type {
   Revised as RevisedVNext,
   ComplianceReportPayload,
 } from "@/shared/contentTypes.vnext";
+import type { DraftRawV1 } from "@/shared/contentTypes.vnext";
 
 export type ContentStatus = "drafted" | "revised";
 
@@ -23,7 +23,7 @@ export type ContentRecord = {
   topic_candidates: TopicCandidatesResponse | null;
   selected_candidate: TopicCandidate | null;
 
-  draft: DraftNaverOutput;
+  draft: DraftVNext;
 
   revised?: {
     revised_md: string;
@@ -39,7 +39,7 @@ export type ContentMeta = {
   selected_candidate: TopicCandidate | null;
 };
 
-export type DraftPayload = DraftNaverOutput | DraftVNext;
+export type DraftPayload = DraftVNext | DraftRawV1;
 export type RevisedPayload = { revised_md: string; revised_html: string } | RevisedVNext;
 export type { ComplianceReportPayload };
 

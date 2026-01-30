@@ -43,6 +43,18 @@ function ensureVersionMap(versionStore: VersionStore, contentId: string): Versio
   return versionStore.get(contentId)!;
 }
 
+function normalizeDraft(draft?: DraftPayload): DraftPayload {
+  if (!draft) return { ...EMPTY_DRAFT };
+  const draft_md = draft.draft_md ?? draft.body_md ?? "";
+  return {
+    ...draft,
+    draft_md,
+    body_md: draft.body_md ?? draft_md,
+    body_md_lines: draft.body_md_lines ?? (draft_md ? [draft_md] : [""]),
+    title_candidates: draft.title_candidates ?? [],
+  };
+}
+
 function ensureReportMap(reportStore: ReportStore, contentId: string): ReportsByChannel {
   if (!reportStore.has(contentId)) {
     reportStore.set(contentId, new Map());
@@ -97,12 +109,12 @@ export class InMemoryContentRepo implements ContentRepo {
     Object.entries(args.draftsByChannel).forEach(([channel, draft]) => {
       const ch = channel as Channel;
       const entry = versionMap.get(ch) ?? {};
-      entry.draft = draft ?? EMPTY_DRAFT;
+      entry.draft = normalizeDraft(draft);
       versionMap.set(ch, entry);
     });
     CHANNELS.forEach((ch) => {
       const entry = versionMap.get(ch) ?? {};
-      if (!entry.draft) entry.draft = EMPTY_DRAFT;
+      if (!entry.draft) entry.draft = normalizeDraft(EMPTY_DRAFT);
       versionMap.set(ch, entry);
     });
   }
@@ -138,7 +150,7 @@ export class InMemoryContentRepo implements ContentRepo {
     const revised: Partial<Record<Channel, RevisedPayload>> = {};
     CHANNELS.forEach((ch) => {
       const entry = versionMap.get(ch);
-      drafts[ch] = entry?.draft ?? EMPTY_DRAFT;
+      drafts[ch] = entry?.draft ?? normalizeDraft(EMPTY_DRAFT);
       if (entry?.revised) revised[ch] = entry.revised;
     });
 

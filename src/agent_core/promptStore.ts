@@ -4,7 +4,7 @@ import { readFile } from "fs/promises";
 export type PromptBundle = {
   system: string;
   user: string;
-  repair: string;
+  repair?: string | null;
   baseDir: string;
 };
 
@@ -34,14 +34,35 @@ export class PromptStore {
     if (cached) return cached;
 
     const baseDir = path.join(this.promptsRoot, args.agent, args.variant, args.version);
-    const [system, user, repair] = await Promise.all([
+    const [system, user] = await Promise.all([
       readFile(path.join(baseDir, "system.txt"), "utf-8"),
       readFile(path.join(baseDir, "user.txt"), "utf-8"),
-      readFile(path.join(baseDir, "repair.txt"), "utf-8"),
     ]);
+
+    let repair: string | null = null;
+    try {
+      repair = await readFile(path.join(baseDir, "repair.txt"), "utf-8");
+    } catch {
+      repair = null; // repair prompt is optional
+    }
 
     const bundle: PromptBundle = { system, user, repair, baseDir };
     this.cache.set(key, bundle);
     return bundle;
+  }
+
+  async loadCommonRepair(): Promise<string | null> {
+    const key = "__common_repair_json_v1";
+    const cached = this.cache.get(key);
+    if (cached?.repair) return cached.repair;
+
+    const filePath = path.join(this.promptsRoot, "common", "repair_json_v1.txt");
+    try {
+      const repair = await readFile(filePath, "utf-8");
+      this.cache.set(key, { system: "", user: "", repair, baseDir: path.dirname(filePath) });
+      return repair;
+    } catch {
+      return null;
+    }
   }
 }

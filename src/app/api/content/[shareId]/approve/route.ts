@@ -7,6 +7,8 @@ import { toMetaAgentDebug } from "@/shared/agentDebugMeta";
 import { ComplianceRewriteOutputSchema } from "@/agents/complianceRewrite/schema";
 import { normalizeComplianceReportPayload } from "@/server/repositories/prismaContentRepo";
 import type { ApproveContentResponse } from "@/shared/apiContracts";
+import type { ComplianceRewriteInputV1 } from "@/agents/complianceRewrite/schema";
+import type { ComplianceRewriteInputV1 } from "@/agents/complianceRewrite/schema";
 
 export const runtime = "nodejs";
 
@@ -62,21 +64,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
 
   const settled = await Promise.allSettled(
     channelsToRewrite.map(async (channel) => {
-      const draftRaw = record.drafts[channel];
-      const safeDraftRaw = draftRaw ?? {
-        title_candidates: [],
-        body_md: "",
-        body_html: "",
+      const draft = record.drafts[channel];
+      const body_md = (draft?.draft_md ?? draft?.body_md ?? "").trim();
+      if (!body_md) {
+        throw new Error(`DRAFT_MISSING:${channel}`);
+      }
+      const must_avoid = (record.intake as any)?.must_avoid ?? "";
+
+      const input: ComplianceRewriteInputV1 = {
+        body_md,
+        must_avoid,
+        channel,
       };
-      const draft = {
-        ...safeDraftRaw,
-        title_candidates: (safeDraftRaw.title_candidates ?? []).slice(0, 5),
-        body_md: safeDraftRaw.body_md ?? "",
-        body_html: safeDraftRaw.body_html ?? "",
-      };
+
       const { result, debug } = await runAgentWithDebug(
         "complianceRewrite",
-        { draft, must_avoid: (record.intake as any)?.must_avoid ?? "" },
+        input,
         { variant_key: channel, prompt_version: "v2", scope_key: record.shareId }
       );
       if (!result.ok) throw new Error("AGENT_FAILED:" + channel);

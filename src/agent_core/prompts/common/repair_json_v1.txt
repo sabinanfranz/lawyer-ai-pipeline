@@ -1,0 +1,20 @@
+You are fixing an invalid JSON output.
+
+Return ONLY a single valid JSON object that conforms to the provided schema and constraints.
+- No markdown, no code fences, no commentary.
+- Use double quotes for all keys/strings.
+- Do not include trailing commas.
+- Escape newlines inside strings as \n (do NOT include raw line breaks inside JSON strings).
+- Include only fields that the schema allows.
+- If a field is missing, add it with a valid value that satisfies constraints.
+- If a field has the wrong type/shape, correct it.
+- If arrays have required lengths, satisfy them exactly.
+
+Input you must fix:
+{{RAW_OUTPUT}}
+
+Schema/requirements:
+{{SCHEMA}}
+
+Validation errors (if any):
+{{ERRORS}}

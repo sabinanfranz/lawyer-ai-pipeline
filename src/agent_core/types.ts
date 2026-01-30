@@ -24,6 +24,9 @@ export type AgentMeta = {
 
   repaired?: boolean;
   repair_attempts?: number;
+
+  parse_mode?: string;
+  output_chars?: number;
 };
 
 export type AgentResult<T> =

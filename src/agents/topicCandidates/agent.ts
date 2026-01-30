@@ -117,30 +117,24 @@ export class TopicCandidatesAgent implements Agent<IntakeInput, TopicCandidatesR
       };
     }
 
+    const commonRepair = await rt.prompts.loadCommonRepair();
+
     // JSON guard
     const guarded = await jsonGuard<TopicCandidatesResponse>({
       raw,
       schema: TopicCandidatesResponseSchema,
       repair: async ({ raw: badRaw }) => {
-        // repair.txt는 system으로 사용
-        const repairSystem = prompts.repair;
-        const repairUser =
-          `아래 출력은 JSON 스키마를 만족하지 않습니다. 반드시 스키마에 맞는 유효한 JSON만 반환하세요.\n\n` +
-          `--- BROKEN OUTPUT ---\n${badRaw}\n\n` +
-          `--- REQUIRED ---\n` +
-          `- candidates는 정확히 7개\n- top3_recommendations는 정확히 3개\n- 출력은 JSON만\n`;
-        if (process.env.DEBUG_AGENT === "1") {
-          // eslint-disable-next-line no-console
-          console.log("[TopicCandidatesAgent] repair_prompt_sizes", {
-            run_id: ctx.run_id,
-            system_len: repairSystem.length,
-            user_len: repairUser.length,
-          });
-        }
-        return await rt.llm.generateText({ system: repairSystem, user: repairUser, run_id: ctx.run_id });
+        if (!commonRepair?.trim()) return "";
+        const repairUser = renderTemplate(commonRepair, {
+          RAW_OUTPUT: badRaw,
+          SCHEMA:
+            "TopicCandidatesResponse: candidates=7, top3_recommendations=3, longtail_keywords length=3, hitl_points length=2",
+          ERRORS: "JSON_PARSE_OR_SCHEMA_VALIDATE_FAILED",
+        });
+        return await rt.llm.generateText({ system: "", user: repairUser, run_id: ctx.run_id });
       },
       fallback: fallbackTopicCandidates,
-      maxRepairAttempts: 2,
+      maxRepairAttempts: commonRepair?.trim() ? 1 : 0,
     });
 
     const data = guarded.data;

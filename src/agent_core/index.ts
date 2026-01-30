@@ -9,3 +9,4 @@ export * from "./telemetry";
 export * from "./registry";
 export * from "./orchestrator";
 export * from "./composer";
+export * from "./textRunner";

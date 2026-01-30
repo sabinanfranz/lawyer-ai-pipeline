@@ -18,6 +18,7 @@ import { TopicCandidatesResponseSchema } from "@/agents/topicCandidates/schema";
 import { CreateContentSchema } from "@/lib/schemas/createContent";
 import type { ContentMetaPayload } from "@/shared/contentMetaTypes";
 import type { ComplianceReportPayload } from "@/shared/contentTypes.vnext";
+import { mdToHtml } from "@/lib/utils/mdToHtml";
 
 function ensureStringArray(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
@@ -174,13 +175,17 @@ export class PrismaContentRepo implements ContentRepo {
       const draftCreates = CHANNELS.map((channel) => {
         const draft = getDraftOrPlaceholder(args.draftsByChannel, channel);
         const meta = args.metaByChannel?.[channel] ?? metaSnapshot;
+        const bodyMd = draft.draft_md ?? draft.body_md ?? EMPTY_DRAFT.draft_md;
+        const titleCandidates = draft.title_candidates ?? EMPTY_DRAFT.title_candidates ?? [];
+        const bodyHtml =
+          draft.body_html ?? (bodyMd ? mdToHtml(bodyMd) : EMPTY_DRAFT.body_html ?? null);
         return {
           contentId: content.id,
           channel,
           versionType: "draft" as const,
-          titleCandidates: draft.title_candidates ?? EMPTY_DRAFT.title_candidates,
-          bodyMd: draft.body_md ?? EMPTY_DRAFT.body_md,
-          bodyHtml: draft.body_html ?? EMPTY_DRAFT.body_html,
+          titleCandidates,
+          bodyMd,
+          bodyHtml,
           meta,
         };
       });
@@ -205,9 +210,11 @@ export class PrismaContentRepo implements ContentRepo {
     content.versions.forEach((v) => {
       if (v.versionType === "draft") {
         drafts[v.channel as Channel] = {
+          draft_md: v.bodyMd ?? "",
           title_candidates: ensureStringArray(v.titleCandidates),
-          body_md: v.bodyMd,
-          body_html: v.bodyHtml,
+          body_md: v.bodyMd ?? undefined,
+          body_md_lines: v.bodyMd ? [v.bodyMd] : undefined,
+          body_html: v.bodyHtml ?? undefined,
         };
       } else if (v.versionType === "revised") {
         revised[v.channel as Channel] = {

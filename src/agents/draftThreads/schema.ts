@@ -10,7 +10,7 @@ export const DraftThreadsLLMResponseSchema = z.object({
         .refine((v) => !v.includes("\n"), { message: "body_md_lines must be single-line" })
     )
     .min(3)
-    .max(3),
+    .max(5),
 });
 
 export type DraftThreadsLLMResponse = z.infer<typeof DraftThreadsLLMResponseSchema>;

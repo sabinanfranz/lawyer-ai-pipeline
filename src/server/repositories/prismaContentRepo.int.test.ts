@@ -5,7 +5,7 @@ import { CHANNELS } from "@/shared/channel";
 
 const repo = new PrismaContentRepo();
 
-const hasDb = !!process.env.DATABASE_URL;
+const hasDb = !!process.env.DATABASE_URL && process.env.RUN_DB_TESTS === "1";
 
 const sampleMeta = {
   intake: { industry: "test", target_role: "ceo", issue_stage: "pre", pain_picker: [], content_goal: "lead", offer_material: "pdf" } as any,

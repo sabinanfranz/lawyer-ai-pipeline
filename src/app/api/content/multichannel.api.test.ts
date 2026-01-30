@@ -3,6 +3,7 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import { InMemoryContentRepo } from "@/server/repositories/inMemoryContentRepo";
 import type { ContentRepo } from "@/server/repositories/contentRepo";
 import { CHANNELS } from "@/shared/channel";
+import { expectDraftContract, expectComplianceReportContract } from "@/test/assertions";
 
 vi.stubGlobal("crypto", crypto as unknown as Crypto);
 
@@ -17,6 +18,10 @@ vi.mock("@/server/repositories", () => {
 const runAgentMock = vi.fn();
 vi.mock("@/agent_core/orchestrator", () => ({
   runAgent: (...args: any[]) => runAgentMock(...args),
+  runAgentWithDebug: async (...args: any[]) => ({
+    result: await runAgentMock(...args),
+    debug: {},
+  }),
 }));
 
 function resetStores() {
@@ -70,6 +75,7 @@ const selectedCandidate = topicCandidates.candidates[0];
 
 function draftFor(name: string) {
   return {
+    draft_md: `${name} 본문`,
     title_candidates: [`${name} 제목1`, `${name} 제목2`, `${name} 제목3`],
     body_md: `${name} 본문`,
     body_html: `<p>${name} 본문</p>`,
@@ -139,17 +145,7 @@ describe("API multichannel flows", () => {
     expect(getJson.ok).toBe(true);
     CHANNELS.forEach((ch) => {
       expect(getJson.data.drafts?.[ch]).toBeTruthy();
-      expect(getJson.data.drafts[ch].body_md.length).toBeGreaterThan(0);
-    });
-  });
-
-  it("uses prompt_version v3 for all draft agents", async () => {
-    await callPostContent();
-    const draftCalls = runAgentMock.mock.calls.filter((c) => c[0].startsWith("draft"));
-    expect(draftCalls).toHaveLength(3);
-    draftCalls.forEach((call) => {
-      const overrides = call[2];
-      expect(overrides?.prompt_version).toBe("v3");
+      expectDraftContract(getJson.data.drafts[ch], 1);
     });
   });
 
@@ -161,13 +157,52 @@ describe("API multichannel flows", () => {
     CHANNELS.forEach((ch) => {
       expect(approve1.data.revised?.[ch]).toBeTruthy();
       expect(approve1.data.compliance_reports?.[ch]).toBeTruthy();
-      expect(approve1.data.revised[ch].revised_md).toContain("정보 제공 목적");
+      expectDraftContract({ draft_md: approve1.data.revised[ch].revised_md }, 1);
+      expectComplianceReportContract(approve1.data.compliance_reports[ch]);
     });
     const midCalls = runAgentMock.mock.calls.length;
     const approve2 = await callApprove(shareId);
     expect(approve2.ok).toBe(true);
     expect(runAgentMock.mock.calls.length).toBe(midCalls); // no additional rewrite calls
     expect(beforeCalls).toBeLessThan(midCalls); // draft calls happened
+  });
+
+  it("approve passes body_md/must_avoid/channel into complianceRewrite", async () => {
+    runAgentMock.mockImplementation((agentName: string, input: any, overrides: any) => {
+      if (agentName.startsWith("draft")) return Promise.resolve({ ok: true, data: draftFor(agentName) });
+      if (agentName === "complianceRewrite") {
+        const ch = overrides?.variant_key ?? "naver";
+        const expectedBody = `draft${ch.charAt(0).toUpperCase()}${ch.slice(1)} 본문`;
+        expect(input.body_md).toBe(expectedBody);
+        expect(input.must_avoid).toBe(intake.must_avoid);
+        expect(["naver", "linkedin", "threads"]).toContain(input.channel);
+        return Promise.resolve({ ok: true, data: revisedFor(ch) });
+      }
+      throw new Error("unknown agent");
+    });
+
+    const shareId = await callPostContent();
+    const res = await callApprove(shareId);
+    expect(res.ok).toBe(true);
+  });
+
+  it("approve fails if body_md missing for a channel", async () => {
+    runAgentMock.mockImplementation((agentName: string, input: any, overrides: any) => {
+      if (agentName.startsWith("draft")) return Promise.resolve({ ok: true, data: draftFor(agentName) });
+      if (agentName === "complianceRewrite") return Promise.resolve({ ok: true, data: revisedFor(overrides?.variant_key ?? "naver") });
+      throw new Error("unknown agent");
+    });
+
+    // create content but wipe one channel's body_md
+    const shareId = await callPostContent();
+    const multi = await repo.getByShareIdMulti(shareId);
+    if (multi) {
+      (multi.drafts["threads"] as any).draft_md = "";
+      (globalThis as any).__versionStore.get(shareId).get("threads").draft = multi.drafts["threads"];
+    }
+
+    const res = await callApprove(shareId);
+    expect(res.ok).toBe(false);
   });
 
   it("approve retries missing channels only after partial failure", async () => {

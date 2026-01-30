@@ -4,6 +4,7 @@ import { DraftLinkedinAgent } from "./agent";
 import { CacheStore } from "@/agent_core/cacheStore";
 import { PromptStore } from "@/agent_core/promptStore";
 import { MockLlmClient } from "@/agent_core/llmClient";
+import { expectDraftContract } from "@/test/assertions";
 
 vi.stubGlobal("crypto", crypto as unknown as Crypto);
 
@@ -30,18 +31,11 @@ const input = {
 };
 
 describe("DraftLinkedinAgent fallback (mock mode)", () => {
-  it("returns valid schema without banned wording", async () => {
+  it("returns DraftRawV1 contract (draft_md non-empty)", async () => {
     const agent = new DraftLinkedinAgent();
     const res = await agent.run(input, ctx, runtime);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const { data } = res;
-    expect(data.title_candidates.length).toBeGreaterThanOrEqual(3);
-    expect(data.body_md.length).toBeGreaterThan(10);
-    expect(data.body_html.length).toBeGreaterThan(10);
-
-    const banned = ["전문", "승소율", "무료 상담", "최고"];
-    const text = `${data.title_candidates.join(" ")} ${data.body_md}`;
-    banned.forEach((b) => expect(text.includes(b)).toBe(false));
+    expectDraftContract(res.data, 5);
   });
 });

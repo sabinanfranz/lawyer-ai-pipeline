@@ -4,20 +4,16 @@ import * as React from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { Loader } from "@/components/ui/Loader";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import type { ContentRecord, ContentRecordMulti } from "@/server/repositories/contentRepo";
 import { CHANNEL_ORDER, CHANNEL_LABEL, type Channel } from "@/shared/channel";
 import { useTopBar } from "@/components/topbar/TopBarContext";
 import { useRouter } from "next/navigation";
+import { DraftViewer } from "@/components/DraftViewer";
+import { EMPTY_DRAFT, type Draft } from "@/shared/contentTypes.vnext";
 
 const PREFILL_KEY = "WAL_PREFILL_INTAKE";
-const EMPTY_DRAFT = {
-  title_candidates: [] as string[],
-  body_md: "",
-  body_html: "",
-};
 
 export default function ContentSharePage({ params }: { params: Promise<{ shareId: string }> }) {
   // Next 15+ client components receive params as a Promise; unwrap via React.use
@@ -142,15 +138,62 @@ export default function ContentSharePage({ params }: { params: Promise<{ shareId
 
       {data && (
         <>
-          {CHANNEL_ORDER.map((ch) => (
-            <DraftBlock
-              key={ch}
-              channel={ch}
-              draft={data.drafts?.[ch] ?? EMPTY_DRAFT}
-              revised={data.revised?.[ch]}
-              report={data.compliance_reports?.[ch]}
-            />
-          ))}
+          {CHANNEL_ORDER.map((ch) => {
+            const draft = data.drafts?.[ch] ?? EMPTY_DRAFT;
+            const draftText = pickDraftText(draft);
+            const secondary = (draft.title_candidates ?? []).join("\n").trim();
+            const revised = data.revised?.[ch];
+            const revisedText = revised?.revised_md ?? "";
+
+            return (
+              <Card key={ch}>
+                <DraftViewer
+                  label={`${CHANNEL_LABEL[ch]} Draft`}
+                  text={draftText}
+                  secondaryText={secondary || undefined}
+                />
+
+                {revised && (
+                  <div className="mt-6 border-t pt-4">
+                    <DraftViewer label={`${CHANNEL_LABEL[ch]} Revised`} text={revisedText} />
+                  </div>
+                )}
+
+                {data.compliance_reports?.[ch] && (
+                  <div className="mt-6 border-t pt-4">
+                    <div className="font-semibold">Compliance Report</div>
+                    <div className="text-sm mt-2">
+                      Risk score: <span className="font-semibold">{data.compliance_reports[ch]?.risk_score}</span>
+                    </div>
+                    <div className="text-sm text-gray-700 mt-2">{data.compliance_reports[ch]?.summary}</div>
+
+                    <div className="mt-3 space-y-2">
+                      {(data.compliance_reports[ch]?.issues ?? []).map((it, idx) => (
+                        <div key={idx} className="rounded border p-3">
+                          {it.category && <div className="text-sm font-semibold">{it.category}</div>}
+                          {it.snippet && (
+                            <div className="text-sm mt-1">
+                              <span className="font-semibold">문장:</span> {it.snippet}
+                            </div>
+                          )}
+                          {it.reason && (
+                            <div className="text-sm mt-1">
+                              <span className="font-semibold">이유:</span> {it.reason}
+                            </div>
+                          )}
+                          {it.suggestion && (
+                            <div className="text-sm mt-1">
+                              <span className="font-semibold">대체:</span> {it.suggestion}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
 
           <Card>
             <div className="font-semibold">승인(HITL)</div>
@@ -204,13 +247,6 @@ export default function ContentSharePage({ params }: { params: Promise<{ shareId
     </main>
   );
 }
-
-const PLACEHOLDER_DRAFT = {
-  title_candidates: [] as string[],
-  body_md: "(초안이 아직 생성되지 않았습니다.)",
-  body_html: "<p>(초안이 아직 생성되지 않았습니다.)</p>",
-};
-
 function normalizeRecord(raw: any): ContentRecordMulti {
   const isMulti = raw && typeof raw === "object" && "drafts" in raw;
   if (!isMulti) {
@@ -234,9 +270,9 @@ function normalizeRecord(raw: any): ContentRecordMulti {
       : raw;
   }
 
-  const drafts: Record<Channel, any> = {} as any;
+  const drafts: Record<Channel, Draft> = {} as any;
   CHANNEL_ORDER.forEach((ch) => {
-    drafts[ch] = raw?.drafts?.[ch] ?? PLACEHOLDER_DRAFT;
+    drafts[ch] = normalizeDraft(raw?.drafts?.[ch]);
   });
 
   return {
@@ -247,92 +283,24 @@ function normalizeRecord(raw: any): ContentRecordMulti {
   } as ContentRecordMulti;
 }
 
-function DraftBlock({
-  channel,
-  draft,
-  revised,
-  report,
-}: {
-  channel: Channel;
-  draft: { title_candidates: string[]; body_md: string; body_html: string };
-  revised?: { revised_md: string; revised_html: string };
-  report?: { risk_score: number; summary: string; issues: any[] };
-}) {
-  return (
-    <Card>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="font-semibold">{CHANNEL_LABEL[channel]} (읽기 전용)</div>
-          <div className="text-xs text-gray-600">복사해서 채널 편집기에 붙여넣으세요.</div>
-        </div>
-        <div className="flex gap-2">
-          <CopyButton text={draft.body_md} label="복사(MD)" />
-          <CopyButton text={draft.body_html} label="복사(HTML)" />
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <div className="text-sm font-semibold">제목 후보</div>
-        <ul className="list-disc ml-5 text-sm mt-1">
-          {(draft.title_candidates ?? []).map((t, i) => (
-            <li key={`${t}-${i}`}>{t}</li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="mt-4">
-        <div className="text-sm font-semibold">본문(Markdown 미리보기)</div>
-        <pre className="mt-2 whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm">{draft.body_md}</pre>
-      </div>
-
-      {revised && (
-        <div className="mt-6 border-t pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="font-semibold">Revised (컴플라이언스 반영본)</div>
-              <div className="text-xs text-gray-600">승인 후 생성된 수정본입니다.</div>
-            </div>
-            <div className="flex gap-2">
-              <CopyButton text={revised.revised_md} label="복사(MD)" />
-              <CopyButton text={revised.revised_html} label="복사(HTML)" />
-            </div>
-          </div>
-          <pre className="mt-3 whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm">{revised.revised_md}</pre>
-        </div>
-      )}
-
-      {report && (
-        <div className="mt-6 border-t pt-4">
-          <div className="font-semibold">Compliance Report</div>
-          <div className="text-sm mt-2">
-            Risk score: <span className="font-semibold">{report.risk_score}</span>
-          </div>
-          <div className="text-sm text-gray-700 mt-2">{report.summary}</div>
-
-          <div className="mt-3 space-y-2">
-            {(report.issues ?? []).map((it, idx) => (
-              <div key={idx} className="rounded border p-3">
-                {it.category && <div className="text-sm font-semibold">{it.category}</div>}
-                {it.snippet && (
-                  <div className="text-sm mt-1">
-                    <span className="font-semibold">문장:</span> {it.snippet}
-                  </div>
-                )}
-                {it.reason && (
-                  <div className="text-sm mt-1">
-                    <span className="font-semibold">이유:</span> {it.reason}
-                  </div>
-                )}
-                {it.suggestion && (
-                  <div className="text-sm mt-1">
-                    <span className="font-semibold">대체:</span> {it.suggestion}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </Card>
-  );
+function normalizeDraft(d: any): Draft {
+  if (!d) return EMPTY_DRAFT;
+  const md = pickDraftText(d);
+  return {
+    draft_md: md,
+    title_candidates: d.title_candidates ?? [],
+    body_html: d.body_html ?? null,
+    body_md: d.body_md ?? md,
+    body_md_lines: Array.isArray(d.body_md_lines) ? d.body_md_lines : [md],
+  };
 }
+
+function pickDraftText(d: any): string {
+  if (!d) return "";
+  if (typeof d.draft_md === "string" && d.draft_md.trim()) return d.draft_md;
+  if (typeof d.body_md === "string" && d.body_md.trim()) return d.body_md;
+  if (Array.isArray(d.body_md_lines)) return d.body_md_lines.join("\n");
+  return "";
+}
+
+// DraftBlock removed in PR3 (DraftViewer now renders all channels uniformly)

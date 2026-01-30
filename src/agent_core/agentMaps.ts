@@ -1,10 +1,8 @@
 import type { IntakeInput } from "@/lib/schemas/intake";
 import type { TopicCandidatesResponse } from "@/agents/topicCandidates";
-import type { DraftNaverResponse } from "@/agents/draftNaver";
-import type { DraftLinkedinResponse } from "@/agents/draftLinkedin";
-import type { DraftThreadsResponse } from "@/agents/draftThreads";
 import type { ComplianceRewriteOutput } from "@/agents/complianceRewrite";
 import type { TopicCandidate } from "@/agents/topicCandidates/schema";
+import type { DraftRawV1 } from "@/shared/contentTypes.vnext";
 
 // Agent name SSOT
 export type AgentName =
@@ -32,17 +30,14 @@ export type AgentInputMap = {
     selected_candidate: TopicCandidate;
     normalized_brief: unknown;
   };
-  complianceRewrite: {
-    draft: { body_md: string; body_html: string; title_candidates?: string[] };
-    must_avoid: string;
-  };
+  complianceRewrite: import("@/agents/complianceRewrite/schema").ComplianceRewriteInputV1;
 };
 
 // Output types (agent result data)
 export type AgentOutputMap = {
   topicCandidates: TopicCandidatesResponse;
-  draftNaver: DraftNaverResponse;
-  draftLinkedin: DraftLinkedinResponse;
-  draftThreads: DraftThreadsResponse;
+  draftNaver: DraftRawV1;
+  draftLinkedin: DraftRawV1;
+  draftThreads: DraftRawV1;
   complianceRewrite: ComplianceRewriteOutput;
 };

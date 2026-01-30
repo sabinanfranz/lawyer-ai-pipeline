@@ -3,14 +3,15 @@ import { canonicalizeJson, sha256 } from "@/agent_core";
 import { jsonGuard } from "@/agent_core/jsonGuard";
 import { renderTemplate } from "@/agent_core/promptStore";
 import { debugLog, isDebugEnabled } from "@/agent_core/debug";
-import { mdToHtml } from "@/lib/utils/mdToHtml";
 import {
   DraftThreadsLLMResponseSchema,
-  DraftThreadsResponseSchema,
   type DraftThreadsLLMResponse,
-  type DraftThreadsResponse,
 } from "./schema";
 import { fallbackDraftThreads } from "./fallback";
+import { DRAFT_LOOSE_MODE } from "@/shared/featureFlags.server";
+import { coerceDraftRaw } from "@/shared/coerceDraftRaw";
+import { runAgentTextWithDebug } from "@/agent_core/textRunner";
+import type { DraftRawV1 } from "@/shared/contentTypes.vnext";
 
 const PROMPT_AGENT_KEY = "draft_threads";
 
@@ -54,6 +55,42 @@ function normalizeTitleCandidates(rawTitles: unknown, payload: any): string[] {
   return titles.slice(0, 6);
 }
 
+function stripThreadsPrefix(s: string): string {
+  return s.replace(/^\[\d+\/\d+\]\s*/gm, "").trim();
+}
+
+function splitTo3Chunks(text: string): [string, string, string] {
+  const t = stripThreadsPrefix(text);
+  const parts = t
+    .split(/\n\s*\n+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 3) {
+    const a = parts[0];
+    const b = parts[1];
+    const c = parts.slice(2).join("\n\n");
+    return [a, b, c];
+  }
+
+  const one = parts.join("\n\n") || t;
+  const s = one.replace(/\s+/g, " ").trim();
+  const n = s.length;
+
+  const i = Math.floor(n / 3);
+  const j = Math.floor((2 * n) / 3);
+
+  const a = s.slice(0, i).trim() || "요약 1";
+  const b = s.slice(i, j).trim() || "요약 2";
+  const c = s.slice(j).trim() || "요약 3";
+  return [a, b, c];
+}
+
+function toThreadsBodyLines(draftMd: string): string[] {
+  const [a, b, c] = splitTo3Chunks(draftMd);
+  return [`[1/3] ${a}`, `[2/3] ${b}`, `[3/3] ${c}`];
+}
+
 function passesThreadShape(lines: string[]): boolean {
   if (!Array.isArray(lines) || lines.length !== 3) return false;
   const required = ["[1/3]", "[2/3]", "[3/3]"];
@@ -67,24 +104,25 @@ function passesThreadShape(lines: string[]): boolean {
 }
 
 function buildFinal(llm: DraftThreadsLLMResponse) {
-  const lines = passesThreadShape(llm.body_md_lines) ? llm.body_md_lines : fallbackDraftThreads().body_md_lines;
+  const lines = passesThreadShape(llm.body_md_lines)
+    ? llm.body_md_lines
+    : fallbackDraftThreads().draft_md.split("\n");
   const body_md = lines.join("\n");
-  const body_html = mdToHtml(body_md);
-  const data = DraftThreadsResponseSchema.parse({
+  const data: DraftRawV1 = {
+    draft_md: body_md,
     title_candidates: llm.title_candidates ?? [],
-    body_md,
-    body_html,
-  });
+    raw_json: llm,
+  };
   return { data, usedFallbackLines: lines !== llm.body_md_lines };
 }
 
-const FALLBACK_SIGNATURE = JSON.stringify(buildFinal(fallbackDraftThreads()).data);
+const FALLBACK_SIGNATURE = JSON.stringify(fallbackDraftThreads());
 
-export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
+export class DraftThreadsAgent implements Agent<any, DraftRawV1> {
   name = "draftThreads";
   version = "v1";
 
-  async run(input: any, ctx: AgentContext, rt: AgentRuntime): Promise<AgentResult<DraftThreadsResponse>> {
+  async run(input: any, ctx: AgentContext, rt: AgentRuntime): Promise<AgentResult<DraftRawV1>> {
     const inputForHash = {
       intake: input?.intake,
       selected_candidate: input?.selected_candidate,
@@ -94,19 +132,59 @@ export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
     const inputHash = sha256(canonical);
     const cacheKey = `${this.name}:${this.version}:${ctx.variant_key}:${ctx.prompt_version}:${ctx.scope_key}:${inputHash}`;
 
+    if (DRAFT_LOOSE_MODE) {
+      const { text, agent_debug, cache_key, input_hash, prompt_path } = await runAgentTextWithDebug({
+        agent_name: this.name,
+        agent_version: this.version,
+        variant_key: ctx.variant_key,
+        prompt_version: ctx.prompt_version,
+        scope_key: ctx.scope_key,
+        prompt_agent_key: PROMPT_AGENT_KEY,
+        input: inputForHash,
+        renderUser: ({ payload_json, prompts }) => renderTemplate(prompts.user, { payload_json }),
+        max_tokens_override: 4000,
+      });
+
+      const fallback = fallbackDraftThreads();
+      const coerced = coerceDraftRaw(text, { fallbackDraftMd: fallback.draft_md });
+
+      const titles =
+        coerced.draft.title_candidates ?? ["Threads 초안 제목", "대체 제목 1", "대체 제목 2"];
+      const body_md_lines = toThreadsBodyLines(coerced.draft.draft_md);
+      const { data } = buildFinal({ title_candidates: titles, body_md_lines });
+
+      const used_fallback =
+        agent_debug.used_fallback || coerced.parse_mode === "empty" || !text.trim();
+
+      if (!(used_fallback && ctx.llm_mode === "openai")) {
+        rt.cache.set(cache_key, data);
+      }
+
+      return {
+        ok: true,
+        data,
+        meta: {
+          used_fallback,
+          cache_hit: agent_debug.cache_hit,
+          cache_key,
+          input_hash,
+          prompt_path,
+          parse_mode: coerced.parse_mode,
+          output_chars: coerced.output_chars,
+        },
+      };
+    }
+
     const cached = rt.cache.get<unknown>(cacheKey);
     if (cached) {
-      const parsed = DraftThreadsResponseSchema.safeParse(cached);
-      if (parsed.success) {
-        const cachedFallback = isFallbackResponse(parsed.data);
-        debugLog("DraftThreadsAgent", `cache_hit=true fallback=${cachedFallback}`);
-        return {
-          ok: true,
-          data: parsed.data,
-          meta: { used_fallback: cachedFallback, cache_hit: true, cache_key: cacheKey, input_hash: inputHash },
-        };
-      }
-      console.warn("[DraftThreadsAgent] cache value invalid → ignore", { cacheKey, run_id: ctx.run_id });
+      const cachedDraft = cached as DraftRawV1;
+      const cachedFallback = isFallbackResponse(cachedDraft);
+      debugLog("DraftThreadsAgent", `cache_hit=true fallback=${cachedFallback}`);
+      return {
+        ok: true,
+        data: cachedDraft,
+        meta: { used_fallback: cachedFallback, cache_hit: true, cache_key: cacheKey, input_hash: inputHash },
+      };
     }
 
     const prompts = await rt.prompts.load({
@@ -128,7 +206,7 @@ export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
     }
 
     if (ctx.llm_mode !== "openai") {
-      const { data } = buildFinal(fallbackDraftThreads());
+      const data = fallbackDraftThreads();
       rt.cache.set(cacheKey, data);
       return {
         ok: true,
@@ -156,7 +234,7 @@ export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
         // eslint-disable-next-line no-console
         console.error("[DraftThreadsAgent] LLM failed", e);
       }
-      const { data } = buildFinal(fallbackDraftThreads());
+      const data = fallbackDraftThreads();
       debugLog("DraftThreadsAgent", "skip cache set reason=LLM_ERROR(openai)", { cacheKey, run_id: ctx.run_id });
       return {
         ok: true,
@@ -171,6 +249,7 @@ export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
       };
     }
 
+    const baseFallback = fallbackDraftThreads();
     const guarded = await jsonGuard<DraftThreadsLLMResponse>({
       raw,
       schema: DraftThreadsLLMResponseSchema,
@@ -190,7 +269,10 @@ export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
           max_tokens_override: 4000,
         });
       },
-      fallback: () => fallbackDraftThreads(),
+      fallback: () => ({
+        title_candidates: baseFallback.title_candidates ?? [],
+        body_md_lines: baseFallback.draft_md.split("\n"),
+      }),
       maxRepairAttempts: 2,
     });
 
@@ -200,7 +282,7 @@ export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
       title_candidates: normalizedTitles,
     };
 
-    const { data, usedFallbackLines } = buildFinal(guardedData);
+      const { data, usedFallbackLines } = buildFinal(guardedData);
     if (guarded.used_fallback || usedFallbackLines) {
       debugLog("DraftThreadsAgent", "fallback reason=JSON_GUARD_FALLBACK|shape_guard");
     }
@@ -221,8 +303,7 @@ export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
         run_id: ctx.run_id,
         title_count: data.title_candidates.length,
         md_lines: guardedData.body_md_lines.length,
-        body_md_len: data.body_md.length,
-        body_html_len: data.body_html.length,
+        body_md_len: data.draft_md.length,
       });
     }
 
@@ -242,6 +323,6 @@ export class DraftThreadsAgent implements Agent<any, DraftThreadsResponse> {
   }
 }
 
-function isFallbackResponse(data: DraftThreadsResponse): boolean {
+function isFallbackResponse(data: DraftRawV1): boolean {
   return JSON.stringify(data) === FALLBACK_SIGNATURE;
 }

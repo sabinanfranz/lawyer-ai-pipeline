@@ -14,6 +14,8 @@ export type AgentDebugMeta = {
   model?: string;
   cache_key_prefix?: string;
   error_kind?: string;
+  parse_mode?: string;
+  output_chars?: number;
 };
 
 export function toMetaAgentDebug(input: Partial<AgentDebugMeta>): AgentDebugMeta {
@@ -33,5 +35,7 @@ export function toMetaAgentDebug(input: Partial<AgentDebugMeta>): AgentDebugMeta
     model: input.model,
     cache_key_prefix: input.cache_key_prefix,
     error_kind: input.error_kind,
+    parse_mode: input.parse_mode,
+    output_chars: input.output_chars,
   };
 }

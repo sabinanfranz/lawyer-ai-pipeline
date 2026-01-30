@@ -4,9 +4,10 @@ import { runAgentWithDebug } from "@/agent_core/orchestrator";
 import { fail, ok, newRequestId, readJson, zodDetails } from "@/server/errors";
 import { CHANNELS, type Channel } from "@/shared/channel";
 import { toMetaAgentDebug } from "@/shared/agentDebugMeta";
-import type { PartialByChannel } from "@/shared/contentTypes.vnext";
+import type { PartialByChannel, Draft } from "@/shared/contentTypes.vnext";
 import { CreateContentSchema } from "@/lib/schemas/createContent";
 import type { CreateContentResponse } from "@/shared/apiContracts";
+import { mdToHtml } from "@/lib/utils/mdToHtml";
 
 export const runtime = "nodejs";
 
@@ -50,11 +51,7 @@ export async function POST(req: Request) {
     });
     if (!res.ok) throw new Error(`agent_failed:${agentName}`);
     return {
-      data: res.data as {
-        title_candidates: string[];
-        body_md: string;
-        body_html: string;
-      },
+      data: res.data as Draft,
       debug,
     };
   };
@@ -76,32 +73,17 @@ export async function POST(req: Request) {
       error_kind: "FALLBACK_EMERGENCY",
     });
 
-  const emergencyFallbackDraft = async (channel: Channel) => {
+  const emergencyFallbackDraft = async (channel: Channel): Promise<Draft> => {
     if (channel === "naver") {
       const { fallbackDraftNaver } = await import("@/agents/draftNaver");
-      const base = fallbackDraftNaver(agentInput);
-      return {
-        title_candidates: base.title_candidates,
-        body_md: base.body_md_lines.join("\n"),
-        body_html: base.body_md_lines.join("\n"),
-      };
+      return fallbackDraftNaver(agentInput);
     }
     if (channel === "linkedin") {
       const { fallbackDraftLinkedin } = await import("@/agents/draftLinkedin");
-      const base = fallbackDraftLinkedin();
-      return {
-        title_candidates: base.title_candidates,
-        body_md: base.body_md_lines.join("\n"),
-        body_html: base.body_md_lines.join("\n"),
-      };
+      return fallbackDraftLinkedin();
     }
     const { fallbackDraftThreads } = await import("@/agents/draftThreads");
-    const base = fallbackDraftThreads();
-    return {
-      title_candidates: base.title_candidates,
-      body_md: base.body_md_lines.join("\n"),
-      body_html: base.body_md_lines.join("\n"),
-    };
+    return fallbackDraftThreads();
   };
 
   const settled = await Promise.allSettled(
@@ -116,7 +98,7 @@ export async function POST(req: Request) {
     })
   );
 
-  const draftsByChannel: Record<Channel, { title_candidates: string[]; body_md: string; body_html: string }> = {
+  const draftsByChannel: Record<Channel, Draft> = {
     naver: await emergencyFallbackDraft("naver"),
     linkedin: await emergencyFallbackDraft("linkedin"),
     threads: await emergencyFallbackDraft("threads"),
@@ -140,6 +122,20 @@ export async function POST(req: Request) {
         agent_debug: toMetaAgentDebug(r.value.debug),
       };
     }
+  });
+
+  // normalize drafts for storage (fill legacy fields for compatibility)
+  CHANNELS.forEach((ch) => {
+    const d = draftsByChannel[ch];
+    const md = d.draft_md ?? d.body_md ?? "";
+    draftsByChannel[ch] = {
+      draft_md: md,
+      title_candidates: d.title_candidates ?? [],
+      body_md: md,
+      body_md_lines: d.body_md_lines ?? [md],
+      body_html: d.body_html ?? mdToHtml(md),
+      raw_json: d.raw_json,
+    };
   });
 
   const now = new Date().toISOString();

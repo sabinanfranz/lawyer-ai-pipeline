@@ -1,4 +1,4 @@
-Last updated: 2026-01-28 (sync)
+Last updated: 2026-01-30 (sync)
 
 # 04_DATA_MODEL
 
@@ -29,3 +29,7 @@ Last updated: 2026-01-28 (sync)
 - `compliance_reports`?: Partial map { channel → { risk_score, summary, issues[] } }
   - compliance_reports는 저장 시점에 `normalizeComplianceReportPayload`로 issues를 `{category,snippet,reason,suggestion}` 표준 4필드로 강제
   - 레거시/부분 데이터 보호: 채널 draft가 없으면 placeholder를 채워 반환
+
+### (Plan) DraftRawV1 / draft_md
+- PR-1+에서 Draft 결과를 `draft_md`(마크다운 텍스트) 1필드 중심으로 저장/노출하는 모드를 도입할 예정.
+- PR-0에서는 `DraftRawV1` 타입/스키마와 `DRAFT_LOOSE_MODE` 플래그만 추가되며, DB 스키마/저장 방식은 변경하지 않는다.

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CHANNELS } from "@/shared/channel";
 
 export const ComplianceIssueSchema = z.object({
   category: z.string(),
@@ -31,3 +32,16 @@ export const ComplianceRewriteLlmSchema = z.object({
   revised_html: z.string(),
 });
 export type ComplianceRewriteLlmOutput = z.infer<typeof ComplianceRewriteLlmSchema>;
+
+// ---- Input V1 (PR4): approve → complianceRewrite 계약 고정 ----
+export const ChannelSchema = z.enum(CHANNELS);
+
+export const ComplianceRewriteInputV1Schema = z
+  .object({
+    body_md: z.string().min(1),
+    must_avoid: z.string().optional().default(""),
+    channel: ChannelSchema,
+  })
+  .passthrough();
+
+export type ComplianceRewriteInputV1 = z.infer<typeof ComplianceRewriteInputV1Schema>;

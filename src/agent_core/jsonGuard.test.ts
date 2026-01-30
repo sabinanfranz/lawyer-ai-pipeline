@@ -12,7 +12,7 @@ test("jsonGuard falls back when parse/repair fails", async () => {
     schema,
     repair: async () => "STILL NOT JSON",
     fallback: () => ({ a: 1 }),
-    maxRepairAttempts: 2,
+    maxRepairAttempts: 1,
   });
 
   expect(out.used_fallback).toBe(true);

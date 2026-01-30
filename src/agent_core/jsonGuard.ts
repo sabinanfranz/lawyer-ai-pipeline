@@ -32,9 +32,9 @@ export async function jsonGuard<T>(args: {
   schema: z.ZodType<T>;
   repair: (p: { raw: string; error: string; attempt: number }) => Promise<string>;
   fallback: () => T;
-  maxRepairAttempts?: number; // default 2
+  maxRepairAttempts?: number; // default 1
 }): Promise<{ data: T; used_fallback: boolean; repaired: boolean; repair_attempts: number }> {
-  const max = args.maxRepairAttempts ?? 2;
+  const max = args.maxRepairAttempts ?? 1;
 
   // 1) parse + validate
   const parsed0 = tryParseLoose(args.raw);
@@ -63,6 +63,11 @@ export async function jsonGuard<T>(args: {
   }
 
   // 2) repair loop
+  if (max <= 0) {
+    debugLog("JSON_GUARD", "repair_skipped=disabled");
+    return { data: args.fallback(), used_fallback: true, repaired: false, repair_attempts: 0 };
+  }
+
   let lastRaw = args.raw;
   for (let attempt = 1; attempt <= max; attempt++) {
     debugLog("JSON_GUARD", `repair_attempt=${attempt} start`);
