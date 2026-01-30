@@ -111,6 +111,9 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInputV1, C
     });
     const system = prompts.system;
 
+    let commonRepair: string | undefined;
+    commonRepair = await rt.prompts.loadCommonRepair();
+
     if (process.env.DEBUG_AGENT === "1") {
       // eslint-disable-next-line no-console
       console.log("[ComplianceRewriteAgent] prompt_sizes", {
@@ -151,8 +154,6 @@ export class ComplianceRewriteAgent implements Agent<ComplianceRewriteInputV1, C
         },
       };
     }
-
-    const commonRepair = await rt.prompts.loadCommonRepair();
 
     const guarded = await jsonGuard<ComplianceRewriteLlmOutput>({
       raw,
