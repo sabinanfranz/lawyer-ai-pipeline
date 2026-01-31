@@ -11,6 +11,7 @@ import { DRAFT_LOOSE_MODE } from "@/shared/featureFlags.server";
 import { coerceDraftRaw } from "@/shared/coerceDraftRaw";
 import { runAgentTextWithDebug } from "@/agent_core/textRunner";
 import type { DraftRawV1 } from "@/shared/contentTypes.vnext";
+import { safeArrayLen, safeStrLen } from "@/shared/safeLen";
 
 const PROMPT_AGENT_KEY = "draft_naver";
 
@@ -304,9 +305,9 @@ export class DraftNaverAgent implements Agent<any, DraftRawV1> {
       // eslint-disable-next-line no-console
       console.log("[DraftNaverAgent] output_sizes", {
         run_id: ctx.run_id,
-        title_count: data.title_candidates?.length ?? 0,
+        title_count: safeArrayLen(data.title_candidates),
         md_lines: normalizedLines.length,
-        body_md_len: data.draft_md.length,
+        body_md_len: safeStrLen(data.draft_md),
       });
     }
 

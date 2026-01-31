@@ -12,6 +12,7 @@ import { DRAFT_LOOSE_MODE } from "@/shared/featureFlags.server";
 import { coerceDraftRaw } from "@/shared/coerceDraftRaw";
 import { runAgentTextWithDebug } from "@/agent_core/textRunner";
 import type { DraftRawV1 } from "@/shared/contentTypes.vnext";
+import { safeArrayLen, safeStrLen } from "@/shared/safeLen";
 
 const PROMPT_AGENT_KEY = "draft_linkedin";
 
@@ -249,10 +250,10 @@ export class DraftLinkedinAgent implements Agent<any, DraftRawV1> {
       // eslint-disable-next-line no-console
       console.log("[DraftLinkedinAgent] output_sizes", {
         run_id: ctx.run_id,
-        title_count: data.title_candidates.length,
+        title_count: safeArrayLen(data.title_candidates),
         md_lines: guardedData.body_md_lines.length,
-        body_md_len: data.body_md.length,
-        body_html_len: data.body_html.length,
+        body_md_len: safeStrLen(data.body_md),
+        body_html_len: safeStrLen(data.body_html),
       });
     }
 
