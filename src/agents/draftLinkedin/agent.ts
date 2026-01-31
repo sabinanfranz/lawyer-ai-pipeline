@@ -252,8 +252,8 @@ export class DraftLinkedinAgent implements Agent<any, DraftRawV1> {
         run_id: ctx.run_id,
         title_count: safeArrayLen(data.title_candidates),
         md_lines: guardedData.body_md_lines.length,
-        body_md_len: safeStrLen(data.body_md),
-        body_html_len: safeStrLen(data.body_html),
+        body_md_len: safeStrLen(data.draft_md),
+        // body_html_len removed: DraftRawV1 does not carry body_html
       });
     }
 
