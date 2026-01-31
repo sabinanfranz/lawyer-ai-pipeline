@@ -202,7 +202,7 @@ export class DraftLinkedinAgent implements Agent<any, DraftRawV1> {
       raw,
       schema: DraftLinkedinLLMResponseSchema,
       repair: async ({ raw: badRaw }) => {
-        const repairSystem = prompts.repair;
+        const repairSystem: string = prompts.repair ?? "";
         const repairUser =
           `이전 응답이 JSON 스키마를 만족하지 않습니다. 아래 스키마에 맞는 JSON만 반환하세요.\n\n` +
           `--- BROKEN OUTPUT ---\n${badRaw}\n\n` +
