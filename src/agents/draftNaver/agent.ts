@@ -127,7 +127,7 @@ export class DraftNaverAgent implements Agent<any, DraftRawV1> {
 
       const fallback = fallbackDraftNaver(input);
       const coerced = coerceDraftRaw(text, {
-        fallbackDraftMd: fallback.body_md_lines.join("\n"),
+        fallbackDraftMd: fallback.draft_md,
       });
 
       const titles = normalizeTitleCandidates(coerced.draft.title_candidates ?? [], input);
