@@ -248,7 +248,7 @@ export class DraftNaverAgent implements Agent<any, DraftRawV1> {
       raw: preprocessedRaw,
       schema: DraftNaverLLMResponseSchema,
       repair: async ({ raw: badRaw }) => {
-        const repairSystem = prompts.repair;
+        const repairSystem: string = prompts.repair ?? "";
         const repairUser =
           `아래 출력은 JSON 스키마를 만족하지 않습니다. 반드시 스키마에 맞는 유효한 JSON만 반환하세요.\n\n` +
           `--- BROKEN OUTPUT ---\n${badRaw}\n\n` +
