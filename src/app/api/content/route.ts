@@ -134,7 +134,7 @@ export async function POST(req: Request) {
       body_md: md,
       body_md_lines: d.body_md_lines ?? [md],
       body_html: d.body_html ?? mdToHtml(md),
-      raw_json: d.raw_json,
+      // raw_json is only available on DraftRawV1; ignore if missing
     };
   });
 
