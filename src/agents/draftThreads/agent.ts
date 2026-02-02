@@ -92,22 +92,11 @@ function toThreadsBodyLines(draftMd: string): string[] {
   return [`[1/3] ${a}`, `[2/3] ${b}`, `[3/3] ${c}`];
 }
 
-function passesThreadShape(lines: string[]): boolean {
-  if (!Array.isArray(lines) || lines.length !== 3) return false;
-  const required = ["[1/3]", "[2/3]", "[3/3]"];
-  const found = new Set<number>();
-  lines.forEach((l) => {
-    required.forEach((tag, idx) => {
-      if (typeof l === "string" && l.trim().startsWith(tag)) found.add(idx);
-    });
-  });
-  return found.size === required.length;
-}
-
 function buildFinal(llm: DraftThreadsLLMResponse) {
-  const lines = passesThreadShape(llm.body_md_lines)
-    ? llm.body_md_lines
-    : fallbackDraftThreads().draft_md.split("\n");
+  const lines =
+    Array.isArray(llm.body_md_lines) && llm.body_md_lines.length > 0
+      ? llm.body_md_lines
+      : fallbackDraftThreads().draft_md.split("\n");
   const body_md = lines.join("\n");
   const data: DraftRawV1 = {
     draft_md: body_md,

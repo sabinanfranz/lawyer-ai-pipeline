@@ -65,9 +65,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
     channelsToRewrite.map(async (channel) => {
       const draft = record.drafts[channel];
       const body_md = (draft?.draft_md ?? draft?.body_md ?? "").trim();
-      if (!body_md) {
-        throw new Error(`DRAFT_MISSING:${channel}`);
-      }
+      // body_md가 비어도 에이전트가 fallback/quality gate로 처리하도록 허용
       const must_avoid = (record.intake as any)?.must_avoid ?? "";
 
       const input: ComplianceRewriteInputV1 = {

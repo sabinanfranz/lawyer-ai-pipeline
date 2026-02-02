@@ -36,9 +36,10 @@ export type ComplianceRewriteLlmOutput = z.infer<typeof ComplianceRewriteLlmSche
 // ---- Input V1 (PR4): approve → complianceRewrite 계약 고정 ----
 export const ChannelSchema = z.enum(CHANNELS);
 
+// Lenient input: allow empty body_md; downstream quality gate/fallback will decide
 export const ComplianceRewriteInputV1Schema = z
   .object({
-    body_md: z.string().min(1),
+    body_md: z.string().optional().default(""),
     must_avoid: z.string().optional().default(""),
     channel: ChannelSchema,
   })
