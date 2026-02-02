@@ -127,13 +127,14 @@ export async function POST(req: Request) {
   // normalize drafts for storage (fill legacy fields for compatibility)
   CHANNELS.forEach((ch) => {
     const d = draftsByChannel[ch];
-    const md = d.draft_md ?? d.body_md ?? "";
+    const dAny = d as Record<string, unknown>;
+    const md = d.draft_md ?? (dAny["body_md"] as string | undefined) ?? "";
     draftsByChannel[ch] = {
       draft_md: md,
       title_candidates: d.title_candidates ?? [],
       body_md: md,
-      body_md_lines: d.body_md_lines ?? [md],
-      body_html: d.body_html ?? mdToHtml(md),
+      body_md_lines: (dAny["body_md_lines"] as string[] | undefined) ?? [md],
+      body_html: (dAny["body_html"] as string | undefined) ?? mdToHtml(md),
       // raw_json is only available on DraftRawV1; ignore if missing
     };
   });

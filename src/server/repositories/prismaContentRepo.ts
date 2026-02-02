@@ -175,10 +175,12 @@ export class PrismaContentRepo implements ContentRepo {
       const draftCreates = CHANNELS.map((channel) => {
         const draft = getDraftOrPlaceholder(args.draftsByChannel, channel);
         const meta = args.metaByChannel?.[channel] ?? metaSnapshot;
-        const bodyMd = draft.draft_md ?? draft.body_md ?? EMPTY_DRAFT.draft_md;
+        const draftAny = draft as Record<string, unknown>;
+        const bodyMd = draft.draft_md ?? (draftAny["body_md"] as string | undefined) ?? EMPTY_DRAFT.draft_md;
         const titleCandidates = draft.title_candidates ?? EMPTY_DRAFT.title_candidates ?? [];
         const bodyHtml =
-          draft.body_html ?? (bodyMd ? mdToHtml(bodyMd) : EMPTY_DRAFT.body_html ?? null);
+          (draftAny["body_html"] as string | null | undefined) ??
+          (bodyMd ? mdToHtml(bodyMd) : EMPTY_DRAFT.body_html ?? null);
         return {
           contentId: content.id,
           channel,

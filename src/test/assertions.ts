@@ -7,7 +7,8 @@ export function expectNonEmptyString(v: unknown, minChars = 1) {
 
 export function expectDraftContract(draft: any, minChars = 1) {
   expect(draft).toBeTruthy();
-  expectNonEmptyString(draft.draft_md ?? draft.body_md ?? "", minChars);
+  const md = draft.draft_md ?? (draft as Record<string, unknown>)["body_md"] ?? "";
+  expectNonEmptyString(md, minChars);
   if (draft.title_candidates != null) {
     expect(Array.isArray(draft.title_candidates)).toBe(true);
   }

@@ -45,14 +45,20 @@ function ensureVersionMap(versionStore: VersionStore, contentId: string): Versio
 
 function normalizeDraft(draft?: DraftPayload): DraftPayload {
   if (!draft) return { ...EMPTY_DRAFT };
-  const draft_md = draft.draft_md ?? draft.body_md ?? "";
-  return {
-    ...draft,
+
+  // Legacy compatibility: pick legacy keys if present, but always normalize to draft_md
+  const asAny = draft as Record<string, unknown>;
+  const draft_md = (asAny["draft_md"] as string | undefined) ?? (asAny["body_md"] as string | undefined) ?? "";
+  const title_candidates = (asAny["title_candidates"] as string[] | undefined) ?? [];
+  const raw_json = asAny["raw_json"];
+
+  const normalized: DraftPayload = {
     draft_md,
-    body_md: draft.body_md ?? draft_md,
-    body_md_lines: draft.body_md_lines ?? (draft_md ? [draft_md] : [""]),
-    title_candidates: draft.title_candidates ?? [],
-  };
+    title_candidates,
+    ...(raw_json !== undefined ? { raw_json } : {}),
+  } as DraftPayload;
+
+  return normalized;
 }
 
 function ensureReportMap(reportStore: ReportStore, contentId: string): ReportsByChannel {

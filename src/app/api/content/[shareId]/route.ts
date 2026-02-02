@@ -56,13 +56,16 @@ function ensureDrafts(record: ContentRecordMulti | ContentRecord) {
 }
 
 function syncLegacyDraftFields(draft: any) {
-  const draft_md = draft?.draft_md ?? draft?.body_md ?? PLACEHOLDER_DRAFT.draft_md;
+  const draft_md =
+    draft?.draft_md ??
+    (draft as Record<string, unknown> | undefined)?.["body_md"] ??
+    PLACEHOLDER_DRAFT.draft_md;
   return {
     draft_md,
     title_candidates: draft?.title_candidates ?? [],
     body_md: draft_md,
     body_md_lines: draft?.body_md_lines ?? [draft_md],
-    body_html: draft?.body_html ?? PLACEHOLDER_DRAFT.body_html,
+    body_html: (draft as Record<string, unknown> | undefined)?.["body_html"] ?? PLACEHOLDER_DRAFT.body_html,
     raw_json: draft?.raw_json,
   };
 }

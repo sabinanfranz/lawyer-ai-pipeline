@@ -289,17 +289,17 @@ function normalizeDraft(d: any): Draft {
   return {
     draft_md: md,
     title_candidates: d.title_candidates ?? [],
-    body_html: d.body_html ?? null,
-    body_md: d.body_md ?? md,
-    body_md_lines: Array.isArray(d.body_md_lines) ? d.body_md_lines : [md],
+    body_html: (d as any)?.body_html ?? null,
+    body_md: (d as any)?.body_md ?? md,
+    body_md_lines: Array.isArray((d as any)?.body_md_lines) ? (d as any).body_md_lines : [md],
   };
 }
 
 function pickDraftText(d: any): string {
   if (!d) return "";
   if (typeof d.draft_md === "string" && d.draft_md.trim()) return d.draft_md;
-  if (typeof d.body_md === "string" && d.body_md.trim()) return d.body_md;
-  if (Array.isArray(d.body_md_lines)) return d.body_md_lines.join("\n");
+  if (typeof (d as any)?.body_md === "string" && (d as any).body_md.trim()) return (d as any).body_md;
+  if (Array.isArray((d as any)?.body_md_lines)) return (d as any).body_md_lines.join("\n");
   return "";
 }
 

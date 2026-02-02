@@ -45,7 +45,7 @@ describe("PrismaContentRepo integration", () => {
     expect(rec).toBeTruthy();
     CHANNELS.forEach((ch) => {
       expect(rec!.drafts[ch]).toBeTruthy();
-      expect(rec!.drafts[ch].body_md).toBeTypeOf("string");
+      expect((rec!.drafts[ch] as any).draft_md).toBeTypeOf("string");
     });
   });
 
