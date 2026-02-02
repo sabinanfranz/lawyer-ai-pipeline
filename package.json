@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "XDG_CACHE_HOME=.cache NEXT_SWC_CACHE_DIR=.cache/next-swc next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",

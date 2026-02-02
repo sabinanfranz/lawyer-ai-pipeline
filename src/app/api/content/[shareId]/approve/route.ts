@@ -64,7 +64,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ shareI
   const settled = await Promise.allSettled(
     channelsToRewrite.map(async (channel) => {
       const draft = record.drafts[channel];
-      const body_md = (draft?.draft_md ?? draft?.body_md ?? "").trim();
+      const body_md = (
+        (draft as { draft_md?: string; body_md?: string } | undefined)?.draft_md ??
+        (draft as { draft_md?: string; body_md?: string } | undefined)?.body_md ??
+        ""
+      ).trim();
       // body_md가 비어도 에이전트가 fallback/quality gate로 처리하도록 허용
       const must_avoid = (record.intake as any)?.must_avoid ?? "";
 
