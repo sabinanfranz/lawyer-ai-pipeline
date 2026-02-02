@@ -8,7 +8,6 @@ import { ComplianceRewriteOutputSchema } from "@/agents/complianceRewrite/schema
 import { normalizeComplianceReportPayload } from "@/server/repositories/prismaContentRepo";
 import type { ApproveContentResponse } from "@/shared/apiContracts";
 import type { ComplianceRewriteInputV1 } from "@/agents/complianceRewrite/schema";
-import type { ComplianceRewriteInputV1 } from "@/agents/complianceRewrite/schema";
 
 export const runtime = "nodejs";
 
